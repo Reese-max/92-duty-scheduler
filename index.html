@@ -921,7 +921,46 @@ function exportExcel(){
 
     XLSX.utils.book_append_sheet(wb,ws,def.label.slice(0,31));
   });
-  XLSX.writeFile(wb,'\u52E4\u52D9\u6392\u73ED_\u7B2C'+S.weekNum+'\u9031.xlsx');
+  var fileName='\u52E4\u52D9\u6392\u73ED_\u7B2C'+S.weekNum+'\u9031.xlsx';
+  /* Mobile-compatible download */
+  var wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+  var blob=new Blob([wbout],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+  var isMobile=/iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+  var isSafari=/^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+
+  if(navigator.share&&isMobile){
+    /* Use Web Share API on mobile when available (best UX on iOS/Android) */
+    var file=new File([blob],fileName,{type:blob.type});
+    navigator.share({files:[file],title:fileName}).then(function(){
+      showToast('Excel 已分享');
+    }).catch(function(err){
+      if(err.name!=='AbortError') fallbackDownload(blob,fileName);
+    });
+  }else if(isMobile&&isSafari){
+    /* iOS Safari fallback: open as data URL in new tab */
+    var reader=new FileReader();
+    reader.onload=function(){
+      var a=document.createElement('a');
+      a.href=reader.result;
+      a.download=fileName;
+      a.style.display='none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(function(){document.body.removeChild(a);showToast('Excel 已下載');},200);
+    };
+    reader.readAsDataURL(blob);
+  }else{
+    fallbackDownload(blob,fileName);
+  }
+}
+
+function fallbackDownload(blob,fileName){
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download=fileName;a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},200);
   showToast('Excel \u5DF2\u4E0B\u8F09');
 }
 
