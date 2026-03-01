@@ -1,0 +1,996 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>92期1隊 半自動勤排系統</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+:root{
+  --bg:#0b1420;--card:rgba(16,26,42,.92);--card-l:rgba(24,38,58,.95);
+  --primary:#0d1b3e;--primary-l:#1a3a6e;--primary-ll:#2a5298;
+  --gold:#d4a843;--gold-l:#e8c96a;--gold-d:#b8922e;
+  --text:#e0e6ed;--text-m:#8899aa;--text-d:#556677;
+  --border:rgba(255,255,255,.08);--border-l:rgba(255,255,255,.15);
+  --cell-empty:rgba(255,255,255,.02);--cell-fill:rgba(42,82,152,.18);
+  --cell-hover:rgba(42,82,152,.35);--cell-conflict:rgba(231,76,60,.25);
+  --success:#27ae60;--warning:#f39c12;--danger:#e74c3c;--info:#3498db;
+  --radius:12px;--shadow:0 8px 32px rgba(0,0,0,.5);
+}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+
+/* === Custom Scrollbar === */
+::-webkit-scrollbar{width:8px;height:8px}
+::-webkit-scrollbar-track{background:rgba(255,255,255,.03);border-radius:4px}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:4px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.2)}
+
+/* === Header === */
+header{background:rgba(13,27,62,.95);backdrop-filter:blur(20px);padding:16px 28px;position:sticky;top:0;z-index:100;border-bottom:1px solid var(--border-l);display:flex;align-items:center;justify-content:space-between;box-shadow:0 2px 20px rgba(0,0,0,.3)}
+header h1{font-size:1.45rem;font-weight:700;letter-spacing:.5px;text-shadow:0 1px 8px rgba(212,168,67,.15)}
+header h1 em{font-style:normal;color:var(--gold);font-weight:400;font-size:.8em;margin-left:10px}
+header .ver{font-size:.75rem;color:var(--text-d);background:rgba(255,255,255,.06);padding:3px 10px;border-radius:20px}
+
+/* === Main Layout === */
+main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
+
+/* === Steps with animation === */
+.step{background:var(--card);border:1px solid var(--border);border-radius:var(--radius);padding:28px;margin-bottom:28px;opacity:0;transform:translateY(12px);transition:opacity .4s ease,transform .4s ease;display:none}
+.step.active{display:block;opacity:1;transform:translateY(0)}
+.step.entering{display:block;opacity:0;transform:translateY(12px)}
+.step h2{font-size:1.15rem;color:var(--gold);margin-bottom:18px;display:flex;align-items:center;gap:10px}
+.step h2 .num{background:linear-gradient(135deg,var(--gold),var(--gold-d));color:var(--primary);width:28px;height:28px;border-radius:50%;display:inline-flex;align-items:center;justify-content:center;font-size:.85rem;font-weight:700;box-shadow:0 2px 8px rgba(212,168,67,.3)}
+.step h3{font-size:.98rem;color:var(--text);margin:18px 0 12px;font-weight:600}
+
+/* === Drop Zone === */
+.drop-zone{border:2px dashed var(--border-l);border-radius:var(--radius);padding:52px 20px;text-align:center;cursor:pointer;transition:all .3s;color:var(--text-m);background:rgba(255,255,255,.01)}
+.drop-zone:hover,.drop-zone.dragover{border-color:var(--gold);background:rgba(212,168,67,.06);color:var(--gold);box-shadow:inset 0 0 30px rgba(212,168,67,.05)}
+.drop-zone input{display:none}
+.drop-zone p{font-size:1.05rem}
+.drop-zone .hint{font-size:.82rem;margin-top:10px;opacity:.7}
+
+/* === Import Status === */
+.import-ok{margin-top:14px;padding:14px 18px;background:rgba(39,174,96,.1);border:1px solid rgba(39,174,96,.25);border-radius:10px;color:var(--success);font-size:.9rem;animation:fadeSlideIn .4s ease}
+.import-err{margin-top:14px;padding:14px 18px;background:rgba(231,76,60,.1);border:1px solid rgba(231,76,60,.25);border-radius:10px;color:var(--danger);font-size:.9rem;animation:fadeSlideIn .4s ease}
+
+/* === Week Row === */
+.week-row{display:flex;align-items:center;gap:16px;flex-wrap:wrap;margin-bottom:18px}
+.week-row label{font-size:.95rem;color:var(--text-m)}
+.week-row input[type=number]{width:64px;padding:8px 10px;border:1px solid var(--border-l);border-radius:8px;background:rgba(255,255,255,.06);color:var(--text);font-size:1rem;text-align:center;transition:border-color .2s;-moz-appearance:textfield}
+.week-row input[type=number]::-webkit-inner-spin-button,.week-row input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.week-row input[type=number]:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,168,67,.15)}
+.week-row .dates{color:var(--gold);font-weight:600;font-size:.95rem}
+
+/* === Duty Grid === */
+.duty-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(290px,1fr));gap:12px;margin-bottom:20px}
+.duty-card{background:var(--card-l);border:1px solid var(--border);border-radius:10px;padding:16px;cursor:pointer;transition:all .25s ease;user-select:none}
+.duty-card:hover{border-color:var(--border-l);background:rgba(30,44,65,.98);transform:translateY(-1px);box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.duty-card.selected{border-color:var(--gold);background:rgba(212,168,67,.06);box-shadow:0 0 0 1px var(--gold),0 4px 16px rgba(212,168,67,.1)}
+.duty-card .dc-head{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.duty-card .dc-check{width:22px;height:22px;border:2px solid var(--text-d);border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:.85rem;transition:all .25s ease}
+.duty-card.selected .dc-check{background:var(--gold);border-color:var(--gold);color:var(--primary);transform:scale(1.1)}
+.duty-card .dc-label{font-weight:600;font-size:.98rem}
+.duty-card .dc-detail{font-size:.82rem;color:var(--text-m);margin-top:4px;line-height:1.5}
+.duty-card .dc-config{margin-top:12px;display:none;border-top:1px solid var(--border);padding-top:12px;animation:fadeSlideIn .3s ease}
+.duty-card.selected .dc-config{display:block}
+.dc-config label{font-size:.82rem;color:var(--text-m);display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.dc-config input[type=number]{width:52px;padding:5px 8px;border:1px solid var(--border-l);border-radius:6px;background:rgba(255,255,255,.06);color:var(--text);font-size:.88rem;text-align:center;transition:border-color .2s;-moz-appearance:textfield}
+.dc-config input[type=number]::-webkit-inner-spin-button,.dc-config input[type=number]::-webkit-outer-spin-button{-webkit-appearance:none;margin:0}
+.dc-config input[type=number]:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,168,67,.15)}
+.dc-config .day-toggles{display:flex;gap:5px;flex-wrap:wrap;margin-top:8px}
+.day-tog{padding:6px 12px;border:1px solid var(--border-l);border-radius:6px;font-size:.82rem;cursor:pointer;color:var(--text-m);background:transparent;transition:all .2s ease}
+.day-tog:hover{border-color:var(--primary-ll);color:var(--text)}
+.day-tog.on{background:var(--primary-ll);border-color:var(--primary-ll);color:#fff;box-shadow:0 2px 8px rgba(42,82,152,.3)}
+
+/* === Summary Bar === */
+.summary-bar{background:rgba(42,82,152,.1);border:1px solid rgba(42,82,152,.2);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;gap:24px;flex-wrap:wrap;font-size:.9rem;animation:fadeSlideIn .3s ease}
+.summary-bar .sb-item{display:flex;align-items:center;gap:6px}
+.summary-bar .sb-num{font-weight:700;font-size:1.1rem}
+.sb-ok{color:var(--success)}.sb-warn{color:var(--warning)}.sb-err{color:var(--danger)}
+
+/* === Buttons === */
+.btn{padding:12px 28px;border:none;border-radius:10px;font-size:.95rem;font-weight:600;cursor:pointer;transition:all .2s ease;min-height:44px;display:inline-flex;align-items:center;justify-content:center}
+.btn:hover{transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.3)}
+.btn:active{transform:translateY(0);box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.btn-gold{background:linear-gradient(135deg,var(--gold),var(--gold-d));color:var(--primary)}.btn-gold:hover{background:linear-gradient(135deg,var(--gold-l),var(--gold));box-shadow:0 4px 20px rgba(212,168,67,.3)}
+.btn-blue{background:linear-gradient(135deg,var(--primary-ll),var(--primary-l));color:#fff}.btn-blue:hover{box-shadow:0 4px 20px rgba(42,82,152,.3)}
+.btn-outline{background:transparent;border:1.5px solid var(--border-l);color:var(--text-m)}.btn-outline:hover{border-color:var(--gold);color:var(--gold)}
+.btn-danger-outline{background:transparent;border:1.5px solid rgba(231,76,60,.3);color:var(--text-m)}.btn-danger-outline:hover{border-color:var(--danger);color:var(--danger);background:rgba(231,76,60,.05)}
+.btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important;box-shadow:none!important}
+.btn-row{display:flex;gap:12px;flex-wrap:wrap}
+
+/* === Tabs === */
+.tab-bar{display:flex;gap:4px;border-bottom:2px solid var(--border);margin-bottom:18px;overflow-x:auto;position:relative}
+.tab-btn{padding:12px 20px;border:none;background:none;color:var(--text-m);font-size:.92rem;cursor:pointer;white-space:nowrap;position:relative;transition:all .2s ease}
+.tab-btn:hover{color:var(--text);background:rgba(255,255,255,.03);border-radius:8px 8px 0 0}
+.tab-btn.active{color:var(--gold);font-weight:600}
+.tab-btn.active::after{content:'';position:absolute;bottom:-2px;left:0;right:0;height:3px;background:linear-gradient(90deg,var(--gold),var(--gold-l));border-radius:3px 3px 0 0;animation:tabSlideLeft .3s ease;transform-origin:left}
+.tab-panel{display:none;animation:fadeIn .3s ease}.tab-panel.active{display:block}
+
+/* === Table (白底黑框正式勤務表) === */
+.tbl-wrap{overflow-x:auto;margin-bottom:18px;border-radius:6px;border:2px solid #333;box-shadow:0 4px 20px rgba(0,0,0,.2);background:#fff}
+.dtbl{width:100%;border-collapse:collapse;font-size:.86rem;font-family:'微軟正黑體',-apple-system,BlinkMacSystemFont,"Noto Sans TC",sans-serif;color:#111}
+.dtbl th{background:#d6dce4;color:#111;padding:10px 8px;font-weight:700;font-size:.9rem;text-align:center;border:1.5px solid #333;position:sticky;top:0;z-index:2}
+.dtbl td{border:1px solid #555;padding:0;text-align:center;vertical-align:middle;background:#fff}
+.dtbl tbody tr{transition:background .15s ease}
+.dtbl tbody tr:hover{background:#eef3fb}
+.dtbl .time-cell{background:#f2f2f2;color:#111;font-weight:700;font-size:.82rem;padding:8px 10px;white-space:pre-line;min-width:78px;position:sticky;left:0;z-index:1;border-right:2px solid #333}
+.person-cell{padding:8px 6px;min-width:86px;min-height:42px;cursor:pointer;transition:all .15s ease;background:#fff}
+.person-cell:hover{background:#dbeafe;box-shadow:inset 0 0 0 2px #3b82f6}
+.person-cell.filled{background:#fff}
+.person-cell.empty-slot{color:#999;font-size:1.1rem;border:1px dashed #bbb;background:#fafafa;animation:emptyPulse 2.5s ease-in-out infinite}
+.pid{font-weight:700;font-size:.9rem;color:#111}
+.pname{font-size:.82rem;color:#555;margin-top:1px}
+.dtbl .row-group-first td{border-top:2.5px solid #333}
+.btn-gold .spinner{display:inline-block;width:16px;height:16px;border:2px solid rgba(13,27,62,.3);border-top-color:var(--primary);border-radius:50%;animation:spin .6s linear infinite;margin-right:8px}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* === Stats Grid === */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.stat-card{background:var(--card-l);border:1px solid var(--border);border-radius:10px;padding:16px 14px;text-align:center;transition:all .2s ease}
+.stat-card:hover{border-color:var(--border-l);transform:translateY(-2px);box-shadow:0 4px 16px rgba(0,0,0,.2)}
+.stat-card .sv{font-size:2rem;font-weight:800;color:var(--gold);line-height:1.2}
+.stat-card .sl{font-size:.8rem;color:var(--text-m);margin-top:6px}
+
+/* === Hours Dashboard === */
+#dashboard h3{border-left:3px solid var(--gold);padding-left:12px}
+.hours-chart{margin-top:14px}
+.hc-row{display:flex;align-items:center;gap:10px;padding:5px 0;font-size:.82rem;transition:background .15s;border-radius:4px;padding-left:4px;padding-right:4px}
+.hc-row:hover{background:rgba(255,255,255,.04)}
+.hc-row:nth-child(even){background:rgba(255,255,255,.01)}
+.hc-row:nth-child(even):hover{background:rgba(255,255,255,.04)}
+.hc-row .hc-name{min-width:100px;text-align:right;color:var(--text-m);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:.82rem}
+.hc-row .hc-bar-wrap{flex:1;height:20px;background:rgba(255,255,255,.04);border-radius:4px;overflow:hidden}
+.hc-row .hc-bar{height:100%;border-radius:4px;transition:width .6s ease-out}
+.hc-row .hc-val{min-width:40px;color:var(--text-m);font-weight:500}
+
+/* === Modal with animation === */
+.modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease}
+.modal-overlay.show{opacity:1;visibility:visible}
+.modal{background:var(--card-l);border:1px solid var(--border-l);border-radius:14px;width:100%;max-width:520px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.05);transform:scale(.92) translateY(10px);transition:transform .25s ease;overflow:hidden}
+.modal-overlay.show .modal{transform:scale(1) translateY(0)}
+.modal-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-head h3{font-size:1.05rem;color:var(--gold)}
+.modal-head .btn-x{background:none;border:none;color:var(--text-m);font-size:1.4rem;cursor:pointer;padding:4px 8px;border-radius:6px;transition:all .15s}
+.modal-head .btn-x:hover{background:rgba(255,255,255,.08);color:var(--text)}
+.modal-search{padding:12px 20px;position:relative}
+.modal-search::before{content:'';position:absolute;left:32px;top:50%;transform:translateY(-50%);width:16px;height:16px;border:2px solid var(--text-d);border-radius:50%;pointer-events:none}
+.modal-search::after{content:'';position:absolute;left:46px;top:50%;transform:translateY(-50%) rotate(45deg);width:6px;height:2px;background:var(--text-d);transform-origin:0 0;pointer-events:none}
+.modal-search input{width:100%;padding:11px 16px 11px 42px;border:1px solid var(--border-l);border-radius:8px;background:rgba(255,255,255,.06);color:var(--text);font-size:.9rem;transition:border-color .2s,box-shadow .2s}
+.modal-search input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,168,67,.12)}
+.modal-search input::placeholder{color:var(--text-d)}
+.picker-list{overflow-y:auto;flex:1;padding:4px 8px 12px}
+.pk-item{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;cursor:pointer;transition:all .15s;border-bottom:1px solid rgba(255,255,255,.04)}
+.pk-item:last-child{border-bottom:none}
+.pk-item:hover{background:rgba(42,82,152,.2);transform:translateX(2px)}
+.pk-id{font-weight:700;min-width:36px;color:var(--gold)}
+.pk-name{font-weight:500}
+.pk-dept{font-size:.8rem;color:var(--text-m)}
+.pk-hrs{margin-left:auto;font-size:.8rem;color:var(--text-m);background:rgba(255,255,255,.05);padding:2px 8px;border-radius:10px}
+.pk-clear{padding:12px 14px;color:var(--danger);cursor:pointer;border-radius:8px;font-size:.88rem;text-align:center;border-bottom:1px solid rgba(231,76,60,.15);margin-bottom:4px;transition:all .15s}
+.pk-clear:hover{background:rgba(231,76,60,.08)}
+.pk-empty{padding:32px 20px;text-align:center;color:var(--text-d);font-size:.9rem}
+.pk-empty::before{content:'📭';display:block;font-size:2rem;margin-bottom:8px}
+.pk-toggle{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:.82rem;color:var(--text-m);cursor:pointer;user-select:none}
+.pk-toggle input{accent-color:var(--gold);cursor:pointer}
+.pk-toggle.auto{color:var(--gold)}
+.pk-badge{font-size:.7rem;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:600}
+.pk-badge.busy{background:rgba(231,76,60,.18);color:#e74c3c}
+.pk-badge.used{background:rgba(243,156,18,.18);color:#f39c12}
+.pk-badge.gender{background:rgba(155,89,182,.18);color:#9b59b6}
+.pk-item.forced{opacity:.8;border-left:3px solid var(--gold)}
+
+/* === Toast with animation === */
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(39,174,96,.95);color:#fff;padding:12px 28px;border-radius:10px;font-size:.92rem;z-index:300;opacity:0;transition:all .3s ease;pointer-events:none;box-shadow:0 4px 20px rgba(39,174,96,.3)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* === Animations === */
+@keyframes fadeSlideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+@keyframes fadeIn{from{opacity:0}to{opacity:1}}
+@keyframes tabSlide{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+@keyframes tabSlideLeft{from{transform:scaleX(0);transform-origin:left}to{transform:scaleX(1);transform-origin:left}}
+@keyframes emptyPulse{0%,100%{opacity:.6}50%{opacity:1}}
+@keyframes countUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+/* === Responsive === */
+@media(max-width:600px){
+  header{padding:12px 16px}header h1{font-size:1.1rem}
+  .step{padding:18px 14px;margin-bottom:20px}
+  .duty-grid{grid-template-columns:1fr}
+  .summary-bar{flex-direction:column;gap:8px}
+  .stats-grid{grid-template-columns:repeat(2,1fr)}
+  .btn{padding:10px 20px;font-size:.9rem}
+}
+</style>
+</head>
+<body>
+<header>
+  <h1>92期1隊 半自動勤排系統<em>114-2</em></h1>
+  <span class="ver">v2.1</span>
+</header>
+<main>
+  <section id="stepImport" class="step active">
+    <h2><span class="num">1</span> 匯入排班資料</h2>
+    <div class="drop-zone" id="dropZone">
+      <p>拖放 <strong>2-26+.xlsx</strong> 到此處</p>
+      <p class="hint">或點擊選擇檔案</p>
+      <input type="file" id="fileInput" accept=".xlsx,.xls">
+    </div>
+    <div id="importStatus"></div>
+  </section>
+  <section id="stepConfig" class="step">
+    <h2><span class="num">2</span> 本週設定</h2>
+    <div class="week-row">
+      <label>第 <input type="number" id="weekNum" min="1" max="20" value="1"> 週</label>
+      <span class="dates" id="weekDates"></span>
+    </div>
+    <h3>選擇本週要排的勤務</h3>
+    <div class="duty-grid" id="dutyGrid"></div>
+    <div class="summary-bar" id="configSummary" style="display:none"></div>
+    <div class="btn-row">
+      <button class="btn btn-gold" id="btnSchedule" disabled>自動排勤</button>
+      <button class="btn btn-outline" id="btnReimport">重新匯入</button>
+    </div>
+  </section>
+  <section id="stepResults" class="step">
+    <h2><span class="num">3</span> 排勤結果 <span style="font-size:.8rem;color:var(--text-m);font-weight:400;margin-left:8px">點擊格子可更換人員</span></h2>
+    <div class="stats-grid" id="statsGrid"></div>
+    <div class="tab-bar" id="resultTabs"></div>
+    <div id="resultPanels"></div>
+    <div class="btn-row" style="margin-top:18px">
+      <button class="btn btn-gold" id="btnExport">匯出 Excel</button>
+      <button class="btn btn-blue" id="btnSave">儲存本週紀錄</button>
+      <button class="btn btn-danger-outline" id="btnReconfig">重新設定</button>
+    </div>
+  </section>
+  <section id="stepDashboard" class="step">
+    <h2><span class="num">4</span> 時數總覽</h2>
+    <div id="dashboard"></div>
+  </section>
+</main>
+<div class="modal-overlay" id="pickerModal">
+  <div class="modal">
+    <div class="modal-head">
+      <h3 id="pickerTitle">選擇人員</h3>
+      <button class="btn-x" id="pickerClose">&times;</button>
+    </div>
+    <div class="modal-search"><input type="text" id="pickerSearch" placeholder="搜尋學號或姓名..."></div>
+    <label class="pk-toggle" id="pickerToggle"><input type="checkbox" id="pickerShowAll"><span id="pickerToggleLabel">顯示全部學員（忽略限制）</span></label>
+    <div class="picker-list" id="pickerList"></div>
+  </div>
+</div>
+<div class="toast" id="toast"></div>
+<script>
+/* ===== Safe DOM helpers ===== */
+function h(tag,attrs,children){
+  var e=document.createElement(tag);
+  if(attrs) Object.keys(attrs).forEach(function(k){
+    if(k==='className') e.className=attrs[k];
+    else if(k==='textContent') e.textContent=attrs[k];
+    else if(k.indexOf('on')===0) e.addEventListener(k.slice(2).toLowerCase(),attrs[k]);
+    else e.setAttribute(k,attrs[k]);
+  });
+  if(children){
+    if(typeof children==='string') e.textContent=children;
+    else if(Array.isArray(children)) children.forEach(function(c){if(c)e.appendChild(c);});
+    else e.appendChild(children);
+  }
+  return e;
+}
+function clearEl(el){while(el.firstChild)el.removeChild(el.firstChild);}
+
+/* ===== CONSTANTS ===== */
+var SEMESTER_START=new Date(2026,2,2);
+var DEPT_MAP={
+  '行政系':'行政系','犯防系預防組':'犯預','犯防系矯治組':'犯矯',
+  '交通系交通組':'交通（交交）','交通系電訊組':'交通（交電）',
+  '國境系境管組':'國境管理','國境系移民組':'國境移民',
+  '行管系':'行管','安全系情報組':'安全情報','安全系社安組':'安全安全',
+  '法律系':'法律','資管系':'資管','鑑識系':'鑑識','外事系':'外事',
+  '水上系':'水上','刑事系':'刑事','消防系消防組':'消防','消防系災防組':'消防'
+};
+var ALL_DAYS=['日','一','二','三','四','五','六'];
+var DUTY_DEFS={
+  '值班':{label:'隊部值班',maleOnly:true,slots:['0600-0800','0800-1000','1000-1200','1200-1350','1350-1600','1600-1800','1800-2000','2000-2200','2200-2300'],defDays:['一','二','三','四','五'],defPP:1},
+  '夜巡':{label:'友誼警英夜巡',maleOnly:true,slots:['2300-0100','0100-0300','0300-0500'],defDays:['日','一','二','三','四','五'],defPP:2},
+  '週間':{label:'週間校巡',maleOnly:true,slots:['2000-2200','2200-2400'],defDays:['一','二','三','四'],defPP:2},
+  '校巡':{label:'假日校巡',maleOnly:false,slots:['0600-0800','0800-1000','1000-1200','1200-1400','1400-1600','1600-1800','1800-2000','2000-2200','2200-2400'],defDays:['五','六','日'],defPP:2},
+  '寢巡':{label:'寢巡',maleOnly:true,slots:['1000-1200'],defDays:['五'],defPP:3},
+  '警技館':{label:'警技館值班',maleOnly:true,slots:['1700-1800','1800-2000','2000-2200'],defDays:['一','二','三','四','五'],defPP:1},
+  '監廚':{label:'監廚',maleOnly:true,slots:['0900-1000','1000-1100','1500-1600','1600-1700'],defDays:['一','二','三','四','五'],defPP:1},
+  '總隊值星':{label:'總隊值星',maleOnly:true,slots:['0000-0200','0200-0400','0400-0600','0600-0800','0800-1000','1000-1200','1200-1350','1350-1550','1550-1800','1800-2000','2000-2200','2200-0000'],defDays:['日','一','二','三','四','五'],defPP:1}
+};
+
+/* ===== STATE ===== */
+var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},workbook:null};
+
+/* ===== UTILS ===== */
+function $(id){return document.getElementById(id);}
+function showToast(msg){var t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2500);}
+function timeToMin(t){return parseInt(t.slice(0,2))*60+parseInt(t.slice(2));}
+function slotHours(slot){var p=slot.split('-'),s=timeToMin(p[0]),e=timeToMin(p[1]);if(e<=s)e+=1440;return(e-s)/60;}
+function fmtSlot(slot){var p=slot.split('-');return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
+function dayOffset(day){var m={'一':0,'二':1,'三':2,'四':3,'五':4,'六':5,'日':-1};return m[day]!=null?m[day]:0;}
+function weekDate(wn,day){var d=new Date(SEMESTER_START);d.setDate(d.getDate()+(wn-1)*7+dayOffset(day));return(d.getMonth()+1)+'月'+d.getDate()+'日';}
+function weekRange(wn){return weekDate(wn,'一')+' — '+weekDate(wn,'五');}
+
+/* ===== Count-up Animation ===== */
+function animateCount(el,target){
+  var start=0,duration=600,startTime=null;
+  function step(ts){
+    if(!startTime)startTime=ts;
+    var progress=Math.min((ts-startTime)/duration,1);
+    var ease=1-Math.pow(1-progress,3);
+    el.textContent=String(Math.round(start+ease*(target-start)));
+    if(progress<1)requestAnimationFrame(step);
+  }
+  requestAnimationFrame(step);
+}
+
+/* ===== PARSING ===== */
+function classifySheet(name){
+  if(name.indexOf('時數')>=0)return'時數';if(name.indexOf('空堂')>=0)return'空堂';
+  if(name.indexOf('值星')>=0)return'值星';if(name.indexOf('警技館')>=0)return'警技館';
+  if(name.indexOf('值班')>=0)return'值班';if(name.indexOf('夜巡')>=0)return'夜巡';
+  if(name.indexOf('週間')>=0)return'週間';if(name.indexOf('校巡')>=0)return'校巡';
+  if(name.indexOf('寢巡')>=0)return'寢巡';if(name.indexOf('監廚')>=0)return'監廚';
+  return null;
+}
+function parseRoster(ws){
+  var raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null}),out=[];
+  for(var r=1;r<raw.length;r++){
+    var row=raw[r];
+    if(!row||row[0]==null||typeof row[0]!=='number')continue;
+    out.push({id:row[0],name:String(row[1]||''),gender:String(row[2]||''),dept:String(row[3]||''),note:String(row[15]||'')});
+  }
+  return out;
+}
+function parseFreePeriods(ws){
+  var raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:null}),fp={};
+  for(var r=1;r<raw.length;r++){
+    var row=raw[r];if(!row||!row[0])continue;
+    var wk=String(row[0]).trim(),desc=String(row[1]||''),deptStr=String(row[3]||'');
+    var tm=desc.match(/(\d{4})-(\d{4})/);if(!tm)continue;
+    var timeRange=tm[1]+'-'+tm[2];
+    var depts=new Set();
+    if(deptStr&&deptStr!=='無'){deptStr.split('、').forEach(function(d){d=d.trim();if(d)depts.add(d);});}
+    if(!fp[wk])fp[wk]=[];
+    fp[wk].push({time:timeRange,depts:depts});
+  }
+  return fp;
+}
+function loadWorkbook(wb){
+  S.workbook=wb;S.students=[];S.freePeriods={};
+  for(var i=0;i<wb.SheetNames.length;i++){
+    var name=wb.SheetNames[i],ws=wb.Sheets[name],type=classifySheet(name);
+    if(type==='時數')S.students=parseRoster(ws);
+    else if(type==='空堂')S.freePeriods=parseFreePeriods(ws);
+  }
+  try{var saved=JSON.parse(localStorage.getItem('dutySchedulerHistory')||'{}');S.history=saved.history||{};S.cumHours=saved.cumHours||{};}catch(e){}
+}
+
+/* ===== SCHEDULING ENGINE ===== */
+function getDeptShort(full){return DEPT_MAP[full]||full;}
+function isStudentFree(dept,weekday,slot){
+  if(weekday==='六'||weekday==='日')return true;
+  var parts=slot.split('-'),ds=timeToMin(parts[0]),de=timeToMin(parts[1]);
+  if(de<=ds)de+=1440;
+  if(de<=360||ds>=1080||ds>=1320)return true;
+  var wk='週'+weekday,entries=S.freePeriods[wk]||[],sd=getDeptShort(dept);
+  for(var i=0;i<entries.length;i++){
+    var ep=entries[i].time.split('-'),es=timeToMin(ep[0]),ee=timeToMin(ep[1]);
+    if(ee<=es)ee+=1440;
+    if(ds<ee&&de>es){if(!entries[i].depts.has(sd))return false;}
+  }
+  return true;
+}
+function getLastWeekIds(){var prev=S.history[S.weekNum-1];return prev?new Set(prev.ids):new Set();}
+function isNightSlot(slot){return timeToMin(slot.split('-')[0])>=1200;}
+function getStudentGender(id){var s=S.students.find(function(x){return x.id===id;});return s?s.gender:null;}
+function getAvailable(dutyType,day,slot,tempRelease){
+  var def=DUTY_DEFS[dutyType],lastWeek=getLastWeekIds();
+  return S.students.filter(function(s){
+    if(def.maleOnly&&s.gender!=='男')return false;
+    if(dutyType==='校巡'&&isNightSlot(slot)&&s.gender==='女')return false;
+    if(S.thisWeekIds.has(s.id)&&!(tempRelease&&tempRelease.has(s.id)))return false;
+    if(lastWeek.has(s.id))return false;
+    if(!isStudentFree(s.dept,day,slot))return false;
+    return true;
+  });
+}
+function autoSchedule(){
+  S.assignments={};S.thisWeekIds=new Set();
+  var lastWeek=getLastWeekIds(),targets=[];
+  Object.keys(S.active).forEach(function(dtype){
+    var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
+    S.assignments[dtype]={};
+    cfg.days.forEach(function(day){
+      def.slots.forEach(function(slot){
+        var key=day+'|'+slot;S.assignments[dtype][key]=[];
+        var eligible=S.students.filter(function(s){
+          if(def.maleOnly&&s.gender!=='男')return false;
+          if(dtype==='校巡'&&isNightSlot(slot)&&s.gender==='女')return false;
+          if(lastWeek.has(s.id))return false;
+          if(!isStudentFree(s.dept,day,slot))return false;
+          return true;
+        }).length;
+        for(var i=0;i<cfg.pp;i++){targets.push({dtype:dtype,day:day,slot:slot,key:key,idx:i,eligible:eligible});}
+      });
+    });
+  });
+  targets.sort(function(a,b){return a.eligible-b.eligible;});
+  for(var t=0;t<targets.length;t++){
+    var tg=targets[t],def=DUTY_DEFS[tg.dtype];
+    var cands=S.students.filter(function(s){
+      if(def.maleOnly&&s.gender!=='男')return false;
+      if(tg.dtype==='校巡'&&isNightSlot(tg.slot)&&s.gender==='女')return false;
+      if(S.thisWeekIds.has(s.id))return false;
+      if(lastWeek.has(s.id))return false;
+      if(!isStudentFree(s.dept,tg.day,tg.slot))return false;
+      return true;
+    });
+    cands.sort(function(a,b){return(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);});
+    if(tg.dtype==='校巡'&&tg.idx>0&&cands.length>0){
+      var assigned=S.assignments[tg.dtype][tg.key];
+      var hasM=assigned.some(function(p){return p&&getStudentGender(p.id)==='男';});
+      var hasF=assigned.some(function(p){return p&&getStudentGender(p.id)==='女';});
+      if(hasM||hasF){
+        var prefer=hasM?'女':'男';
+        var preferred=cands.filter(function(s){return s.gender===prefer;});
+        var rest=cands.filter(function(s){return s.gender!==prefer;});
+        cands=preferred.concat(rest);
+      }
+    }
+    if(cands.length>0){
+      var c=cands[0];
+      S.assignments[tg.dtype][tg.key].push({id:c.id,name:c.name});
+      S.thisWeekIds.add(c.id);
+    }
+  }
+}
+
+/* ===== UI: Steps with animation ===== */
+function showStep(ids){
+  document.querySelectorAll('.step').forEach(function(el){
+    if(ids.indexOf(el.id)<0){
+      el.classList.remove('active');
+    }
+  });
+  ids.forEach(function(id){
+    var el=$(id);
+    if(!el.classList.contains('active')){
+      el.classList.add('active');
+    }
+  });
+}
+
+/* ===== UI: Config ===== */
+function renderConfig(){
+  var grid=$('dutyGrid');clearEl(grid);
+  Object.keys(DUTY_DEFS).forEach(function(dtype){
+    var def=DUTY_DEFS[dtype];
+    var card=h('div',{className:'duty-card','data-duty':dtype});
+
+    var chk=h('div',{className:'dc-check',role:'checkbox','aria-checked':'false',tabindex:'0'});
+    var head=h('div',{className:'dc-head'},[
+      chk,
+      h('div',{className:'dc-label'},def.label)
+    ]);
+    card.appendChild(head);
+
+    var detail=h('div',{className:'dc-detail'},def.slots.length+' 時段 | 預設 '+def.defDays.join('')+' | '+(def.maleOnly?'僅男':'男女')+' | 每班 '+def.defPP+' 人');
+    card.appendChild(detail);
+
+    var cfg=h('div',{className:'dc-config'});
+    var ppLabel=h('label',{},'每班人數 ');
+    var ppInput=h('input',{type:'number',className:'cfg-pp',min:'1',max:'10',value:String(def.defPP)});
+    ppLabel.appendChild(ppInput);
+    cfg.appendChild(ppLabel);
+
+    var dayLabel=h('label',{style:'margin-top:6px'},'啟用天數');
+    cfg.appendChild(dayLabel);
+    var dayDiv=h('div',{className:'day-toggles'});
+    ALL_DAYS.forEach(function(d){
+      var isOn=def.defDays.indexOf(d)>=0;
+      var btn=h('button',{className:'day-tog'+(isOn?' on':''),'data-day':d},d);
+      dayDiv.appendChild(btn);
+    });
+    cfg.appendChild(dayDiv);
+    card.appendChild(cfg);
+    grid.appendChild(card);
+
+    card.addEventListener('click',function(e){
+      if(e.target.closest('.dc-config')&&!e.target.closest('.dc-head')){}
+      if(e.target.classList.contains('day-tog')){e.target.classList.toggle('on');updateConfigSummary();return;}
+      if(e.target.closest('.cfg-pp'))return;
+      card.classList.toggle('selected');
+      var ck=card.querySelector('.dc-check'),sel=card.classList.contains('selected');
+      ck.textContent=sel?'\u2713':'';
+      ck.setAttribute('aria-checked',sel?'true':'false');
+      updateConfigSummary();
+    });
+    ppInput.addEventListener('change',updateConfigSummary);
+  });
+  updateWeekDates();
+  $('weekNum').addEventListener('change',updateWeekDates);
+}
+function updateWeekDates(){
+  S.weekNum=parseInt($('weekNum').value)||1;
+  $('weekDates').textContent=weekRange(S.weekNum);
+  updateConfigSummary();
+}
+function updateConfigSummary(){
+  S.active={};var totalSlots=0,maleSlots=0;
+  document.querySelectorAll('.duty-card.selected').forEach(function(card){
+    var dtype=card.getAttribute('data-duty'),def=DUTY_DEFS[dtype];
+    var pp=parseInt(card.querySelector('.cfg-pp').value)||def.defPP;
+    var days=[];card.querySelectorAll('.day-tog.on').forEach(function(b){days.push(b.getAttribute('data-day'));});
+    if(days.length===0)return;
+    S.active[dtype]={days:days,pp:pp};
+    var sc=def.slots.length*days.length*pp;totalSlots+=sc;
+    if(def.maleOnly)maleSlots+=sc;
+  });
+  var lastWeek=getLastWeekIds();
+  var availM=S.students.filter(function(s){return s.gender==='男'&&!lastWeek.has(s.id);}).length;
+  var availF=S.students.filter(function(s){return s.gender==='女'&&!lastWeek.has(s.id);}).length;
+  var bar=$('configSummary');
+  if(totalSlots===0){bar.style.display='none';$('btnSchedule').disabled=true;return;}
+  bar.style.display='flex';$('btnSchedule').disabled=false;
+  var ok=totalSlots<=(availM+availF)&&maleSlots<=availM;
+  clearEl(bar);
+  var items=[
+    {t:'需求',n:totalSlots,c:''},
+    {t:'可用男',n:availM,c:''},
+    {t:'可用女',n:availF,c:''},
+    {t:ok?'\u2713 人數充足':'\u26A0 人數不足',n:'',c:ok?'sb-ok':'sb-err'}
+  ];
+  items.forEach(function(it){
+    var item=h('div',{className:'sb-item'+(it.c?' '+it.c:'')});
+    item.appendChild(document.createTextNode(it.t+' '));
+    if(it.n!==''){var sp=h('span',{className:'sb-num'},String(it.n));item.appendChild(sp);}
+    bar.appendChild(item);
+  });
+  var lastInfo=h('div',{className:'sb-item',style:'font-size:.78rem;color:var(--text-d)'},'\u4E0A\u9031\u5DF2\u6392 '+lastWeek.size+' \u4EBA');
+  bar.appendChild(lastInfo);
+}
+
+/* ===== UI: Results ===== */
+function renderStatsBar(){
+  var tf=0,te=0,ts=0;
+  Object.keys(S.active).forEach(function(dtype){
+    var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
+    cfg.days.forEach(function(day){def.slots.forEach(function(slot){
+      var key=day+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
+      var filled=arr.filter(function(p){return!!p;}).length;
+      tf+=filled;te+=Math.max(0,cfg.pp-filled);ts+=cfg.pp;
+    });});
+  });
+  var grid=$('statsGrid');clearEl(grid);
+  [{v:ts,l:'總格數',c:'var(--gold)'},{v:tf,l:'已填入',c:'var(--success)'},{v:te,l:'空缺',c:te?'var(--danger)':'var(--text-d)'},{v:S.thisWeekIds.size,l:'本週排勤人數',c:'var(--info)'}].forEach(function(d){
+    var card=h('div',{className:'stat-card'});
+    var sv=h('div',{className:'sv',style:'color:'+d.c},'0');
+    card.appendChild(sv);
+    card.appendChild(h('div',{className:'sl'},d.l));
+    grid.appendChild(card);
+    setTimeout(function(){animateCount(sv,d.v);},100);
+  });
+}
+function renderResults(){
+  renderStatsBar();
+  var tabBar=$('resultTabs'),panels=$('resultPanels');
+  clearEl(tabBar);clearEl(panels);
+  var first=true;
+  Object.keys(S.active).forEach(function(dtype){
+    var def=DUTY_DEFS[dtype];
+    var btn=h('button',{className:'tab-btn'+(first?' active':''),'data-duty':dtype},def.label);
+    tabBar.appendChild(btn);
+    var panel=h('div',{className:'tab-panel'+(first?' active':''),id:'panel-'+dtype});
+    panel.appendChild(buildDutyTable(dtype));
+    panels.appendChild(panel);
+    first=false;
+  });
+  tabBar.addEventListener('click',function(e){
+    var btn=e.target.closest('.tab-btn');if(!btn)return;
+    tabBar.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
+    panels.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
+    btn.classList.add('active');
+    $('panel-'+btn.getAttribute('data-duty')).classList.add('active');
+  });
+}
+function buildDutyTable(dtype){
+  var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
+  var wrap=h('div',{className:'tbl-wrap'});
+  var table=h('table',{className:'dtbl'});
+  var thead=h('thead');
+  var hr=h('tr');
+  hr.appendChild(h('th',{},'時段'));
+  cfg.days.forEach(function(day){hr.appendChild(h('th',{},weekDate(S.weekNum,day)+'('+day+')'));});
+  thead.appendChild(hr);table.appendChild(thead);
+  var tbody=h('tbody');
+  def.slots.forEach(function(slot){
+    for(var p=0;p<cfg.pp;p++){
+      var tr=h('tr');
+      if(p===0&&cfg.pp>1)tr.classList.add('row-group-first');
+      if(p===0){var tc=h('td',{className:'time-cell'},fmtSlot(slot));if(cfg.pp>1)tc.setAttribute('rowspan',String(cfg.pp));tr.appendChild(tc);}
+      cfg.days.forEach(function(day){
+        var td=h('td',{className:'person-cell'});
+        var key=day+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
+        var person=arr[p];
+        if(person){
+          td.classList.add('filled');
+          td.appendChild(h('div',{className:'pid'},String(person.id)));
+          td.appendChild(h('div',{className:'pname'},person.name));
+        }else{td.classList.add('empty-slot');td.textContent='+';}
+        (function(dt,dy,sl,pi){td.addEventListener('click',function(){openPicker(dt,dy,sl,pi);})})(dtype,day,slot,p);
+        tr.appendChild(td);
+      });
+      tbody.appendChild(tr);
+    }
+  });
+  table.appendChild(tbody);wrap.appendChild(table);return wrap;
+}
+
+/* ===== UI: Picker ===== */
+var pickerCtx=null,pickerState={};
+function getAllStudentsForPicker(dtype,day,slot,slotIds,current){
+  var def=DUTY_DEFS[dtype],lastWeek=getLastWeekIds();
+  var tempRelease=new Set();if(current)tempRelease.add(current.id);
+  return S.students.filter(function(s){
+    if(slotIds.has(s.id))return false;
+    if(current&&s.id===current.id)return false;
+    return true;
+  }).map(function(s){
+    var reasons=[];
+    if(def.maleOnly&&s.gender!=='男')reasons.push('gender');
+    if(dtype==='校巡'&&isNightSlot(slot)&&s.gender==='女')reasons.push('night');
+    if(S.thisWeekIds.has(s.id)&&!(tempRelease&&tempRelease.has(s.id)))reasons.push('used');
+    if(lastWeek.has(s.id))reasons.push('used');
+    if(!isStudentFree(s.dept,day,slot))reasons.push('busy');
+    return{id:s.id,name:s.name,dept:s.dept,gender:s.gender,reasons:reasons};
+  });
+}
+function openPicker(dtype,day,slot,idx){
+  pickerCtx={dtype:dtype,day:day,slot:slot,idx:idx};
+  var def=DUTY_DEFS[dtype],key=day+'|'+slot;
+  var arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
+  var current=arr[idx];
+  $('pickerTitle').textContent=def.label+' | '+weekDate(S.weekNum,day)+'('+day+') '+fmtSlot(slot);
+  var slotIds=new Set();arr.forEach(function(p,i){if(p&&i!==idx)slotIds.add(p.id);});
+  var tempRelease=new Set();if(current)tempRelease.add(current.id);
+  var candidates=getAvailable(dtype,day,slot,tempRelease).filter(function(s){return!slotIds.has(s.id);});
+  candidates.sort(function(a,b){return(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);});
+  var allStudents=getAllStudentsForPicker(dtype,day,slot,slotIds,current);
+  allStudents.sort(function(a,b){return(a.reasons.length-b.reasons.length)||(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);});
+  var autoShowAll=candidates.length===0;
+  var cb=$('pickerShowAll');
+  cb.checked=autoShowAll;
+  var toggle=$('pickerToggle');
+  toggle.classList.toggle('auto',autoShowAll);
+  $('pickerToggleLabel').textContent=autoShowAll?'已自動開啟：無符合條件人員，顯示全部學員':'顯示全部學員（忽略限制）';
+  pickerState={candidates:candidates,allStudents:allStudents,current:current,showAll:autoShowAll};
+  refreshPickerList();
+  $('pickerSearch').value='';
+  $('pickerModal').classList.add('show');
+  setTimeout(function(){$('pickerSearch').focus();},150);
+  $('pickerSearch').oninput=function(){refreshPickerList();};
+  cb.onchange=function(){
+    pickerState.showAll=cb.checked;
+    toggle.classList.toggle('auto',false);
+    $('pickerToggleLabel').textContent='顯示全部學員（忽略限制）';
+    refreshPickerList();
+  };
+}
+function refreshPickerList(){
+  var q=$('pickerSearch').value.trim().toLowerCase();
+  var src=pickerState.showAll?pickerState.allStudents:pickerState.candidates;
+  var filtered=q?src.filter(function(s){return String(s.id).indexOf(q)>=0||s.name.toLowerCase().indexOf(q)>=0||s.dept.toLowerCase().indexOf(q)>=0;}):src;
+  renderPickerList(filtered,pickerState.current,pickerState.showAll);
+}
+function renderPickerList(candidates,current,showAll){
+  var list=$('pickerList');clearEl(list);
+  if(current){
+    var clr=h('div',{className:'pk-clear'},'\u2715 清除此格（移除 '+current.id+' '+current.name+'）');
+    clr.addEventListener('click',function(){assignPerson(null);closePicker();});
+    list.appendChild(clr);
+  }
+  if(candidates.length===0){
+    var empty=h('div',{className:'pk-empty'},showAll?'搜尋無結果':'目前沒有符合條件的可用人員');
+    list.appendChild(empty);
+    return;
+  }
+  candidates.forEach(function(s){
+    var forced=showAll&&s.reasons&&s.reasons.length>0;
+    var item=h('div',{className:'pk-item'+(forced?' forced':'')});
+    item.appendChild(h('span',{className:'pk-id'},String(s.id)));
+    var nameSpan=h('span',{className:'pk-name'},s.name);
+    item.appendChild(nameSpan);
+    if(forced){
+      s.reasons.forEach(function(r){
+        var badge=h('span',{className:'pk-badge '+r});
+        if(r==='busy')badge.textContent='有課';
+        else if(r==='used')badge.textContent='已排';
+        else if(r==='gender')badge.textContent='性別';
+        else if(r==='night')badge.textContent='夜間';
+        nameSpan.appendChild(badge);
+      });
+    }
+    item.appendChild(h('span',{className:'pk-dept'},s.dept));
+    var hrs=S.cumHours[s.id]||0;
+    item.appendChild(h('span',{className:'pk-hrs'},hrs?hrs.toFixed(1)+'h':'0h'));
+    item.addEventListener('click',function(){assignPerson(s);closePicker();});
+    list.appendChild(item);
+  });
+}
+function assignPerson(student){
+  if(!pickerCtx)return;
+  var ctx=pickerCtx,key=ctx.day+'|'+ctx.slot;
+  if(!S.assignments[ctx.dtype])S.assignments[ctx.dtype]={};
+  if(!S.assignments[ctx.dtype][key])S.assignments[ctx.dtype][key]=[];
+  var arr=S.assignments[ctx.dtype][key],old=arr[ctx.idx];
+  if(old){
+    var still=false;
+    Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){
+      if(dt===ctx.dtype&&k===key)return;
+      if(S.assignments[dt][k].some(function(p){return p&&p.id===old.id;}))still=true;
+    });});
+    if(!still)S.thisWeekIds.delete(old.id);
+  }
+  if(student){
+    arr[ctx.idx]={id:student.id,name:student.name};
+    S.thisWeekIds.add(student.id);
+    showToast('已指派 '+student.id+' '+student.name);
+  }else{
+    arr[ctx.idx]=undefined;
+    showToast('已清除');
+  }
+  var panel=$('panel-'+ctx.dtype);
+  if(panel){clearEl(panel);panel.appendChild(buildDutyTable(ctx.dtype));}
+  renderStatsBar();renderDashboard();
+}
+function closePicker(){$('pickerModal').classList.remove('show');pickerCtx=null;}
+
+/* ===== UI: Dashboard ===== */
+function renderDashboard(){
+  var weekHrs={};
+  Object.keys(S.assignments).forEach(function(dtype){
+    Object.keys(S.assignments[dtype]).forEach(function(key){
+      var slot=key.split('|')[1],hrs=slotHours(slot);
+      (S.assignments[dtype][key]||[]).forEach(function(p){if(p)weekHrs[p.id]=(weekHrs[p.id]||0)+hrs;});
+    });
+  });
+  var dash=$('dashboard');clearEl(dash);
+  var assigned=S.students.filter(function(s){return weekHrs[s.id];});
+  assigned.sort(function(a,b){return(weekHrs[b.id]||0)-(weekHrs[a.id]||0);});
+  var maxH=1;assigned.forEach(function(s){if(weekHrs[s.id]>maxH)maxH=weekHrs[s.id];});
+  var titleH3=h('h3',{style:'margin-bottom:14px;font-size:1.1rem;color:var(--gold);display:flex;align-items:center;gap:8px'});
+  titleH3.appendChild(document.createTextNode('本週排勤 '));
+  titleH3.appendChild(h('span',{style:'font-size:1.4rem;font-weight:800'},String(assigned.length)));
+  titleH3.appendChild(document.createTextNode(' 人'));
+  dash.appendChild(titleH3);
+  var chart=h('div',{className:'hours-chart'});
+  assigned.forEach(function(s,i){
+    var hrs=weekHrs[s.id]||0,pct=Math.round(hrs/maxH*100);
+    var ratio=hrs/maxH;
+    var hue=Math.round(210-(ratio*174));
+    var color='hsl('+hue+',75%,55%)';
+    var colorEnd='hsl('+hue+',75%,42%)';
+    var row=h('div',{className:'hc-row'});
+    row.appendChild(h('span',{className:'hc-name'},s.id+' '+s.name));
+    var bw=h('div',{className:'hc-bar-wrap'});
+    var bar=h('div',{className:'hc-bar',style:'width:0%;background:linear-gradient(90deg,'+color+','+colorEnd+')'});
+    bw.appendChild(bar);
+    row.appendChild(bw);
+    row.appendChild(h('span',{className:'hc-val'},hrs.toFixed(1)+'h'));
+    chart.appendChild(row);
+    setTimeout(function(){bar.style.width=pct+'%';},50+i*8);
+  });
+  dash.appendChild(chart);
+}
+
+/* ===== EXPORT (styled xlsx-js-style, matches original format) ===== */
+function exportExcel(){
+  var wb=XLSX.utils.book_new();
+  var FN='\u5FAE\u8EDF\u6B63\u9ED1\u9AD4';
+  var bdr={top:{style:'thin',color:{rgb:'000000'}},bottom:{style:'thin',color:{rgb:'000000'}},left:{style:'thin',color:{rgb:'000000'}},right:{style:'thin',color:{rgb:'000000'}}};
+  var sTitle={font:{bold:true,sz:14,name:FN},alignment:{horizontal:'center',vertical:'center'},fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+  var sHeader={font:{bold:true,sz:11,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdr,fill:{patternType:'solid',fgColor:{rgb:'D6DCE4'}}};
+  var sTime={font:{bold:true,sz:10,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdr,fill:{patternType:'solid',fgColor:{rgb:'F2F2F2'}}};
+  var sId={font:{bold:true,sz:10,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdr,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+  var sName={font:{sz:10,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdr,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+  var sSig={font:{sz:10,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdr,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+  var sNote={font:{sz:9,name:FN},alignment:{horizontal:'left',vertical:'top',wrapText:true},border:bdr,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+  var noteText='\u5099\u8A3B\uFF1A\n1\u3001\u8F2A\u503C\u52E4\u52D9\uFF0C\u8ACB\u540C\u5B78\u52D9\u5FC5\u63D0\u65E95-10\u5206\u9418\u5230\u52E4\u3002\n2\u3001\u8ACB\u540C\u5B78\u4E92\u76F8\u63D0\u9192\u503C\u52E4\u6642\u9593\u3002\n3\u3001\u5982\u6709\u7591\u554F\uFF0C\u8ACB\u5411\u52E4\u52D9\u6392\u8868\u54E1921127\u6C5F\u777F\u627F(B218)\u3001921165\u8B1D\u9825\u8B6F(B218)\u53CD\u61C9\u3002\n4\u3001\u672C\u8868\u516C\u5E03\u5F8C\uFF0C\u8ACB\u540C\u5B78\u65BC\u81EA\u5DF1\u540D\u5B57\u4E0B\u65B9\u7C3D\u540D(\u62BC\u6642\u9593)\u78BA\u8A8D\u3002';
+  /* Horizontal layout: 校巡 (people side-by-side, pp*2 cols/day, 2 rows/slot) */
+  var HORIZ={'校巡':true};
+
+  Object.keys(S.active).forEach(function(dtype){
+    var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
+    var days=cfg.days,pp=cfg.pp,horiz=!!HORIZ[dtype];
+    var colsPerDay=horiz?pp*2:2;
+    var rowsPerSlot=horiz?2:pp*2;
+    var totalCols=1+days.length*colsPerDay;
+    var aoa=[],merges=[],rh=[];
+
+    /* Row 0: Title */
+    var title='\u4E2D\u592E\u8B66\u5BDF\u5927\u5B78 92\u671F1\u968A  114\u5B78\u5E74\u5EA6\u7B2C2\u5B78\u671F'+def.label+'  (\u7B2C'+S.weekNum+'\u9031)';
+    var titleRow=new Array(totalCols).fill('');titleRow[0]=title;
+    aoa.push(titleRow);merges.push({s:{r:0,c:0},e:{r:0,c:totalCols-1}});
+    rh.push({hpt:33});
+
+    /* Row 1: Dates */
+    var dateRow=new Array(totalCols).fill('');dateRow[0]='\u65E5\u671F';
+    for(var i=0;i<days.length;i++){var dc=1+i*colsPerDay;dateRow[dc]=weekDate(S.weekNum,days[i]);merges.push({s:{r:1,c:dc},e:{r:1,c:dc+colsPerDay-1}});}
+    aoa.push(dateRow);rh.push({hpt:28});
+
+    /* Row 2: Days */
+    var dayRow=new Array(totalCols).fill('');dayRow[0]='\u661F\u671F';
+    for(var i=0;i<days.length;i++){var dc=1+i*colsPerDay;dayRow[dc]=days[i];merges.push({s:{r:2,c:dc},e:{r:2,c:dc+colsPerDay-1}});}
+    aoa.push(dayRow);rh.push({hpt:34});
+
+    /* Data rows: each slot = name rows + signature rows */
+    var r=3;
+    def.slots.forEach(function(slot){
+      if(horiz){
+        /* Horizontal: 2 rows per slot (name + sig), pp people side by side */
+        var nameRow=new Array(totalCols).fill('');
+        var sigRow=new Array(totalCols).fill('');
+        nameRow[0]=fmtSlot(slot);
+        for(var i=0;i<days.length;i++){
+          var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
+          for(var p=0;p<pp;p++){
+            var dc=1+i*colsPerDay+p*2;
+            if(arr[p]){nameRow[dc]=arr[p].id;nameRow[dc+1]=arr[p].name;}
+          }
+          /* Merge signature cells per person */
+          for(var p=0;p<pp;p++){
+            var dc=1+i*colsPerDay+p*2;
+            merges.push({s:{r:r+1,c:dc},e:{r:r+1,c:dc+1}});
+          }
+        }
+        aoa.push(nameRow);aoa.push(sigRow);
+        merges.push({s:{r:r,c:0},e:{r:r+1,c:0}});
+        rh.push({hpt:45});rh.push({hpt:60});
+        r+=2;
+      }else{
+        /* Vertical: pp*2 rows per slot, each person = name row + sig row */
+        for(var p=0;p<pp;p++){
+          var nameRow=new Array(totalCols).fill('');
+          var sigRow=new Array(totalCols).fill('');
+          if(p===0)nameRow[0]=fmtSlot(slot);
+          for(var i=0;i<days.length;i++){
+            var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
+            var dc=1+i*2;
+            if(arr[p]){nameRow[dc]=arr[p].id;nameRow[dc+1]=arr[p].name;}
+            /* Merge signature row B:C for this day */
+            merges.push({s:{r:r+p*2+1,c:dc},e:{r:r+p*2+1,c:dc+1}});
+          }
+          aoa.push(nameRow);aoa.push(sigRow);
+          rh.push({hpt:45});rh.push({hpt:60});
+        }
+        /* Merge time col across all rows for this slot */
+        if(rowsPerSlot>1)merges.push({s:{r:r,c:0},e:{r:r+rowsPerSlot-1,c:0}});
+        r+=rowsPerSlot;
+      }
+    });
+
+    /* Note row */
+    var noteR=r;
+    var noteRow=new Array(totalCols).fill('');noteRow[0]=noteText;
+    aoa.push(noteRow);merges.push({s:{r:noteR,c:0},e:{r:noteR+4,c:totalCols-1}});
+    /* Add 4 extra empty rows for note area */
+    for(var n=0;n<4;n++){aoa.push(new Array(totalCols).fill(''));rh.push({hpt:16});}
+    rh.push({hpt:16});
+
+    /* Build worksheet */
+    var ws=XLSX.utils.aoa_to_sheet(aoa);
+    ws['!merges']=merges;
+
+    /* Apply styles */
+    var range=XLSX.utils.decode_range(ws['!ref']);
+    for(var R=range.s.r;R<=range.e.r;R++){
+      for(var C=range.s.c;C<=range.e.c;C++){
+        var addr=XLSX.utils.encode_cell({r:R,c:C});
+        if(!ws[addr])ws[addr]={t:'s',v:''};
+        if(R===0){ws[addr].s=sTitle;}
+        else if(R===1||R===2){ws[addr].s=sHeader;}
+        else if(R>=noteR){ws[addr].s=sNote;}
+        else if(C===0){ws[addr].s=sTime;}
+        else{
+          /* Determine if this is a name row or signature row */
+          var dataRow=R-3;
+          var isNameRow,isSigRow;
+          if(horiz){isNameRow=dataRow%2===0;isSigRow=dataRow%2===1;}
+          else{isNameRow=dataRow%2===0;isSigRow=dataRow%2===1;}
+          if(isSigRow){ws[addr].s=sSig;}
+          else if(C%2===1){ws[addr].s=sId;}
+          else{ws[addr].s=sName;}
+        }
+      }
+    }
+
+    /* Column widths */
+    var cw=[{wch:15}];
+    for(var i=0;i<days.length;i++){
+      if(horiz){for(var p=0;p<pp;p++)cw.push({wch:8},{wch:14});}
+      else{cw.push({wch:8},{wch:18});}
+    }
+    ws['!cols']=cw;
+    ws['!rows']=rh;
+
+    XLSX.utils.book_append_sheet(wb,ws,def.label.slice(0,31));
+  });
+  XLSX.writeFile(wb,'\u52E4\u52D9\u6392\u73ED_\u7B2C'+S.weekNum+'\u9031.xlsx');
+  showToast('Excel \u5DF2\u4E0B\u8F09');
+}
+
+/* ===== PERSISTENCE ===== */
+function saveWeek(){
+  var weekHrs={};
+  Object.keys(S.assignments).forEach(function(dtype){
+    Object.keys(S.assignments[dtype]).forEach(function(key){
+      var slot=key.split('|')[1],hrs=slotHours(slot);
+      (S.assignments[dtype][key]||[]).forEach(function(p){if(p)weekHrs[p.id]=(weekHrs[p.id]||0)+hrs;});
+    });
+  });
+  Object.keys(weekHrs).forEach(function(id){S.cumHours[id]=(S.cumHours[id]||0)+weekHrs[id];});
+  S.history[S.weekNum]={ids:Array.from(S.thisWeekIds)};
+  localStorage.setItem('dutySchedulerHistory',JSON.stringify({history:S.history,cumHours:S.cumHours}));
+  showToast('第 '+S.weekNum+' 週紀錄已儲存（'+S.thisWeekIds.size+' 人）');
+}
+
+/* ===== INIT ===== */
+function handleFile(file){
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var wb=XLSX.read(e.target.result);loadWorkbook(wb);
+      if(S.students.length===0)throw new Error('找不到勤務時數總表');
+      var status=$('importStatus');clearEl(status);
+      var div=h('div',{className:'import-ok'},
+        '\u2713 匯入成功：'+S.students.length+' 位學員（男 '+S.students.filter(function(s){return s.gender==='男';}).length+' / 女 '+S.students.filter(function(s){return s.gender==='女';}).length+'），'+Object.keys(S.freePeriods).length+' 天空堂資料');
+      status.appendChild(div);
+      showStep(['stepImport','stepConfig']);
+      updateConfigSummary();showToast('匯入成功');
+    }catch(err){
+      var status=$('importStatus');clearEl(status);
+      status.appendChild(h('div',{className:'import-err'},'\u2715 匯入失敗：'+err.message));
+    }
+  };
+  reader.readAsArrayBuffer(file);
+}
+function init(){
+  renderConfig();
+  var dz=$('dropZone'),fi=$('fileInput');
+  dz.addEventListener('click',function(){fi.click();});
+  dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('dragover');});
+  dz.addEventListener('dragleave',function(){dz.classList.remove('dragover');});
+  dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('dragover');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
+  fi.addEventListener('change',function(){if(fi.files[0])handleFile(fi.files[0]);});
+  $('btnSchedule').addEventListener('click',function(){
+    var btn=$('btnSchedule');
+    btn.disabled=true;
+    var spinner=h('span',{className:'spinner'});
+    btn.insertBefore(spinner,btn.firstChild);
+    btn.childNodes[btn.childNodes.length-1].textContent||btn.appendChild(document.createTextNode(''));
+    setTimeout(function(){
+      autoSchedule();renderResults();renderDashboard();
+      showStep(['stepImport','stepConfig','stepResults','stepDashboard']);
+      btn.removeChild(spinner);
+      btn.disabled=false;
+      $('stepResults').scrollIntoView({behavior:'smooth'});
+    },300);
+  });
+  $('btnReimport').addEventListener('click',function(){showStep(['stepImport']);});
+  $('btnReconfig').addEventListener('click',function(){showStep(['stepImport','stepConfig']);});
+  $('btnExport').addEventListener('click',exportExcel);
+  $('btnSave').addEventListener('click',saveWeek);
+  $('pickerClose').addEventListener('click',closePicker);
+  $('pickerModal').addEventListener('click',function(e){if(e.target===$('pickerModal'))closePicker();});
+  document.addEventListener('keydown',function(e){if(e.key==='Escape')closePicker();});
+}
+document.addEventListener('DOMContentLoaded',init);
+</script>
+</body>
+</html>
