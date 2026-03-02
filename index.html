@@ -372,8 +372,6 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
       <button class="btn btn-gold" id="btnFillEmpty">隨機填滿空格</button>
       <button class="btn btn-gold" id="btnExport">匯出 Excel</button>
       <button class="btn btn-blue" id="btnSave">儲存本週紀錄</button>
-      <button class="btn btn-outline" id="btnBackup">匯出備份</button>
-      <button class="btn btn-outline" id="btnRestore">匯入備份<input type="file" id="restoreInput" accept=".json" style="display:none"></button>
       <button class="btn btn-danger-outline" id="btnReconfig">重新設定</button>
     </div>
   </section>
@@ -441,6 +439,7 @@ var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds
 
 /* ===== UTILS ===== */
 function byId(id){return document.getElementById(id);}
+var $=byId;
 function showToast(msg){var t=byId('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2500);}
 function timeToMin(t){return parseInt(t.slice(0,2))*60+parseInt(t.slice(2));}
 function slotHours(slot){var p=slot.split('-'),s=timeToMin(p[0]),e=timeToMin(p[1]);if(e<=s)e+=1440;return(e-s)/60;}
