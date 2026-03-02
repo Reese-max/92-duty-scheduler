@@ -798,14 +798,17 @@ function exportExcel(){
   var bdrAll={top:bM,bottom:bM,left:bM,right:bM};
   var bdrId={top:bM,bottom:bM,left:bM,right:bT};
   var bdrName={top:bM,bottom:bM,left:bT,right:bM};
-  /* Style presets matching original Excel format */
-  var sTitle={font:{bold:true,sz:22,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-  var sHeader={font:{bold:true,sz:18,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-  var sTime={font:{bold:true,sz:16,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+  /* Fixed styles (same across all duty types) */
   var sId={font:{sz:24,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrId,fill:{patternType:'solid',fgColor:{rgb:'D8D8D8'}}};
-  var sName={font:{sz:24,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+  var sName={font:{sz:24,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName};
   var sSig={font:{sz:10,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-  var sNote={font:{sz:16,name:FN},alignment:{horizontal:'left',vertical:'top',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+  /* Per-sheet font sizes: {title, header(date/weekday), time, note} */
+  var FONT_SIZES={'\u503C\u73ED':{title:22,header:16,time:16,note:20},'\u591C\u5DE1':{title:20,header:16,time:16,note:16},'\u9031\u9593':{title:20,header:16,time:16,note:16},'\u6821\u5DE1':{title:22,header:16,time:16,note:16},'\u5BE2\u5DE1':{title:22,header:16,time:18,note:20},'\u8B66\u6280\u9928':{title:22,header:16,time:18,note:18},'\u76E3\u5EDA':{title:20,header:20,time:18,note:18},'\u7E3D\u968A\u503C\u661F':{title:26,header:20,time:16,note:20}};
+  /* Time slot font override: \u5BE2\u5DE1/\u8B66\u6280\u9928 use \u6A19\u6977\u9AD4-\u7E41 */
+  var TIME_FONT={'\u5BE2\u5DE1':'\u6A19\u6977\u9AD4-\u7E41','\u8B66\u6280\u9928':'\u6A19\u6977\u9AD4-\u7E41'};
+  /* Slot format: raw=no colons, fullwidth=\uFF1A+newline, halfwidth=default */
+  var SLOT_FMT={'\u76E3\u5EDA':'raw','\u591C\u5DE1':'fullwidth','\u5BE2\u5DE1':'fullwidth','\u8B66\u6280\u9928':'fullwidth','\u9031\u9593':'fullwidth'};
+  function fmtSlotEx(slot,fmt){var p=slot.split('-');if(fmt==='raw')return p[0]+'-'+p[1];if(fmt==='fullwidth')return p[0].slice(0,2)+'\uFF1A'+p[0].slice(2)+'-\n'+p[1].slice(0,2)+'\uFF1A'+p[1].slice(2);return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
   var noteText='\u5099\u8A3B\uFF1A\n1\u3001\u8F2A\u503C\u52E4\u52D9\uFF0C\u8ACB\u540C\u5B78\u52D9\u5FC5\u63D0\u65E95-10\u5206\u9418\u5230\u52E4\u3002\n2\u3001\u8ACB\u540C\u5B78\u4E92\u76F8\u63D0\u9192\u503C\u52E4\u6642\u9593\u3002\n3\u3001\u5982\u6709\u7591\u554F(\u5982\u885D\u5802\u3001\u56E0\u6545\u7121\u6CD5\u503C\u73ED\u7B49)\uFF0C\u8ACB\u5411\u52E4\u52D9\u6392\u8868\u54E1921127\u6C5F\u777F\u627F(B218)\u3001921165\u8B1D\u9821\u8B6F(B218)\u53CD\u61C9\u3002\n4\u3001\u672C\u8868\u516C\u5E03\u5F8C\uFF0C\u8ACB\u540C\u5B78\u65BC\u81EA\u5DF1\u540D\u5B57\u4E0B\u65B9\u7C3D\u540D(\u62BC\u6642\u9593)\u78BA\u8A8D\uFF0C\u5982\u9700\u66F4\u6539\uFF0C\u8ACB\u5831\u7531\u5340\u968A\u9577\u6838\u7AE0\u4FEE\u6B63\uFF0C\u82E5\u900E\u6642\u672A\u7C3D\u540D\u8005\uFF0C\u5C07\u4F9D\u898F\u5B9A\u8A18\u9EDE\u8655\u5206\u3002';
   /* Horizontal layout: 校巡 (people side-by-side, pp*2 cols/day, 2 rows/slot) */
   var HORIZ={'校巡':true};
@@ -818,6 +821,14 @@ function exportExcel(){
     var rowsPerSlot=horiz?2:pp*2;
     var totalCols=1+days.length*colsPerDay;
     var aoa=[],merges=[],rh=[];
+    /* Per-sheet dynamic styles (no bold, font sizes vary by duty type) */
+    var fs=FONT_SIZES[dtype]||{title:22,header:16,time:16,note:16};
+    var timeFN=TIME_FONT[dtype]||FN;
+    var slotFmt=SLOT_FMT[dtype]||'halfwidth';
+    var sTitle={font:{sz:fs.title,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+    var sHeader={font:{sz:fs.header,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+    var sTime={font:{sz:fs.time,name:timeFN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+    var sNote={font:{sz:fs.note,name:FN},alignment:{horizontal:'left',vertical:'top',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
 
     /* Row 0: Title */
     var titleLabel=TITLE_MAP[dtype]||def.label;
@@ -843,7 +854,7 @@ function exportExcel(){
         /* Horizontal: 2 rows per slot (name + sig), pp people side by side */
         var nameRow=new Array(totalCols).fill('');
         var sigRow=new Array(totalCols).fill('');
-        nameRow[0]=fmtSlot(slot);
+        nameRow[0]=fmtSlotEx(slot,slotFmt);
         for(var i=0;i<days.length;i++){
           var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
           for(var p=0;p<pp;p++){
@@ -865,7 +876,7 @@ function exportExcel(){
         for(var p=0;p<pp;p++){
           var nameRow=new Array(totalCols).fill('');
           var sigRow=new Array(totalCols).fill('');
-          if(p===0)nameRow[0]=fmtSlot(slot);
+          if(p===0)nameRow[0]=fmtSlotEx(slot,slotFmt);
           for(var i=0;i<days.length;i++){
             var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
             var dc=1+i*2;
@@ -905,14 +916,11 @@ function exportExcel(){
         else if(R>=noteR){ws[addr].s=sNote;}
         else if(C===0){ws[addr].s=sTime;}
         else{
-          /* Determine if this is a name row or signature row */
-          var dataRow=R-3;
-          var isNameRow,isSigRow;
-          if(horiz){isNameRow=dataRow%2===0;isSigRow=dataRow%2===1;}
-          else{isNameRow=dataRow%2===0;isSigRow=dataRow%2===1;}
-          if(isSigRow){ws[addr].s=sSig;}
-          else if(C%2===1){ws[addr].s=sId;}
+          /* dataRow%2: 0=name row, 1=signature row (same for horiz/vertical) */
+          if((R-3)%2===1){ws[addr].s=sSig;}
+          else if(C%2===1){ws[addr].s=sId;ws[addr].z='000';}
           else{ws[addr].s=sName;}
+          /* TODO: holiday handling — merge cells + grey fill + "放假" text for non-duty days */
         }
       }
     }
