@@ -963,7 +963,13 @@ function exportExcel(){
         else{
           /* dataRow%2: 0=name row, 1=signature row (same for horiz/vertical) */
           var isEmpty=(!ws[addr].v&&ws[addr].v!==0)||String(ws[addr].v).trim()==='';
-          if((R-3)%2===1){ws[addr].s=isEmpty?sSigEmpty:sSig;}
+          if((R-3)%2===1){
+            /* Signature row: check the name row above (R-1) to decide gray or white */
+            var aboveAddr=XLSX.utils.encode_cell({r:R-1,c:C});
+            var aboveCell=ws[aboveAddr];
+            var nameEmpty=!aboveCell||(!aboveCell.v&&aboveCell.v!==0)||String(aboveCell.v).trim()==='';
+            ws[addr].s=nameEmpty?sSigEmpty:sSig;
+          }
           else if(C%2===1){ws[addr].s=sId;if(!isEmpty)ws[addr].z='000';}
           else{ws[addr].s=isEmpty?sNameEmpty:sName;}
         }
