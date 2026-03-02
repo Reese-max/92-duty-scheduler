@@ -843,6 +843,10 @@ function exportExcel(){
   var sId={font:{sz:24,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrId,fill:{patternType:'solid',fgColor:{rgb:'D8D8D8'}}};
   var sName={font:{sz:24,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName};
   var sSig={font:{sz:10,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+  /* Gray-fill variants for empty (unfilled) cells */
+  var grayFill={patternType:'solid',fgColor:{rgb:'D8D8D8'}};
+  var sNameEmpty={font:{sz:24,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName,fill:grayFill};
+  var sSigEmpty={font:{sz:10,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
   /* Per-sheet font sizes: {title, header(date/weekday), time, note} */
   var FONT_SIZES={'\u503C\u73ED':{title:22,header:16,time:16,note:20},'\u591C\u5DE1':{title:20,header:16,time:16,note:16},'\u9031\u9593':{title:20,header:16,time:16,note:16},'\u6821\u5DE1':{title:22,header:16,time:16,note:16},'\u5BE2\u5DE1':{title:22,header:16,time:18,note:20},'\u8B66\u6280\u9928':{title:22,header:16,time:18,note:18},'\u76E3\u5EDA':{title:20,header:20,time:18,note:18},'\u7E3D\u968A\u503C\u661F':{title:26,header:20,time:16,note:20}};
   /* Time slot font override: \u5BE2\u5DE1/\u8B66\u6280\u9928 use \u6A19\u6977\u9AD4-\u7E41 */
@@ -958,10 +962,16 @@ function exportExcel(){
         else if(C===0){ws[addr].s=sTime;}
         else{
           /* dataRow%2: 0=name row, 1=signature row (same for horiz/vertical) */
-          if((R-3)%2===1){ws[addr].s=sSig;}
-          else if(C%2===1){ws[addr].s=sId;ws[addr].z='000';}
-          else{ws[addr].s=sName;}
-          /* TODO: holiday handling — merge cells + grey fill + "放假" text for non-duty days */
+          var isEmpty=(!ws[addr].v&&ws[addr].v!==0)||String(ws[addr].v).trim()==='';
+          if((R-3)%2===1){
+            /* Signature row: check the name row above (R-1) to decide gray or white */
+            var aboveAddr=XLSX.utils.encode_cell({r:R-1,c:C});
+            var aboveCell=ws[aboveAddr];
+            var nameEmpty=!aboveCell||(!aboveCell.v&&aboveCell.v!==0)||String(aboveCell.v).trim()==='';
+            ws[addr].s=nameEmpty?sSigEmpty:sSig;
+          }
+          else if(C%2===1){ws[addr].s=sId;if(!isEmpty)ws[addr].z='000';}
+          else{ws[addr].s=isEmpty?sNameEmpty:sName;}
         }
       }
     }
