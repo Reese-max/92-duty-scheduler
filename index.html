@@ -1155,7 +1155,7 @@ function exportExcel(){
           var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
           for(var p=0;p<pp;p++){
             var dc=1+i*colsPerDay+p*2;
-            if(arr[p]){nameRow[dc]=arr[p].id;nameRow[dc+1]=arr[p].name;}
+            if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
           }
           /* Merge signature cells per person */
           for(var p=0;p<pp;p++){
@@ -1176,7 +1176,7 @@ function exportExcel(){
           for(var i=0;i<days.length;i++){
             var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
             var dc=1+i*2;
-            if(arr[p]){nameRow[dc]=arr[p].id;nameRow[dc+1]=arr[p].name;}
+            if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
             /* Merge signature row B:C for this day */
             merges.push({s:{r:r+p*2+1,c:dc},e:{r:r+p*2+1,c:dc+1}});
           }
@@ -1220,7 +1220,7 @@ function exportExcel(){
           var idAddr=XLSX.utils.encode_cell({r:nameR,c:idC});
           var slotEmpty=!ws[idAddr]||!ws[idAddr].v;
           if((R-3)%2===1){ws[addr].s=slotEmpty?sSigEmpty:sSig;}
-          else if((C-1)%2===0){ws[addr].s=sId;ws[addr].z='000';}
+          else if((C-1)%2===0){ws[addr].s=sId;}
           else{ws[addr].s=slotEmpty?sNameEmpty:sName;}
         }
       }
