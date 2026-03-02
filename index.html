@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>92期1隊 半自動勤排系統</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js" integrity="sha384-OLBgp1GsljhM2TJ+sbHjaiH9txEUvgdDTAzHv2P24donTt6/529l+9Ua0vFImLlb" crossorigin="anonymous"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -178,8 +178,10 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .pk-toggle.auto{color:var(--gold)}
 .pk-badge{font-size:.7rem;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:600}
 .pk-badge.busy{background:rgba(231,76,60,.18);color:#e74c3c}
-.pk-badge.used{background:rgba(243,156,18,.18);color:#f39c12}
+.pk-badge.thisWeek{background:rgba(243,156,18,.18);color:#f39c12}
+.pk-badge.lastWeek{background:rgba(230,126,34,.18);color:#e67e22}
 .pk-badge.gender{background:rgba(155,89,182,.18);color:#9b59b6}
+.pk-badge.night{background:rgba(52,73,94,.25);color:#7f8c8d}
 .pk-item.forced{opacity:.8;border-left:3px solid var(--gold)}
 
 /* === Toast with animation === */
@@ -242,6 +244,8 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
     <div class="btn-row" style="margin-top:18px">
       <button class="btn btn-gold" id="btnExport">匯出 Excel</button>
       <button class="btn btn-blue" id="btnSave">儲存本週紀錄</button>
+      <button class="btn btn-outline" id="btnBackup">匯出備份</button>
+      <button class="btn btn-outline" id="btnRestore">匯入備份<input type="file" id="restoreInput" accept=".json" style="display:none"></button>
       <button class="btn btn-danger-outline" id="btnReconfig">重新設定</button>
     </div>
   </section>
@@ -304,11 +308,11 @@ var DUTY_DEFS={
 };
 
 /* ===== STATE ===== */
-var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},workbook:null};
+var S={students:[],studentMap:{},freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},workbook:null,emptySlotCount:0};
 
 /* ===== UTILS ===== */
-function $(id){return document.getElementById(id);}
-function showToast(msg){var t=$('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2500);}
+function byId(id){return document.getElementById(id);}
+function showToast(msg){var t=byId('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2500);}
 function timeToMin(t){return parseInt(t.slice(0,2))*60+parseInt(t.slice(2));}
 function slotHours(slot){var p=slot.split('-'),s=timeToMin(p[0]),e=timeToMin(p[1]);if(e<=s)e+=1440;return(e-s)/60;}
 function fmtSlot(slot){var p=slot.split('-');return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
@@ -362,18 +366,34 @@ function parseFreePeriods(ws){
   return fp;
 }
 function loadWorkbook(wb){
-  S.workbook=wb;S.students=[];S.freePeriods={};
+  S.workbook=wb;S.students=[];S.studentMap={};S.freePeriods={};
   for(var i=0;i<wb.SheetNames.length;i++){
     var name=wb.SheetNames[i],ws=wb.Sheets[name],type=classifySheet(name);
     if(type==='時數')S.students=parseRoster(ws);
     else if(type==='空堂')S.freePeriods=parseFreePeriods(ws);
   }
-  try{var saved=JSON.parse(localStorage.getItem('dutySchedulerHistory')||'{}');S.history=saved.history||{};S.cumHours=saved.cumHours||{};}catch(e){}
+  /* Build studentMap for O(1) lookup by id (Defect #22) */
+  S.students.forEach(function(s){S.studentMap[s.id]=s;});
+  try{
+    var saved=JSON.parse(localStorage.getItem('dutySchedulerHistory')||'{}');
+    S.history=(saved.history && typeof saved.history==='object')?saved.history:{};
+    S.cumHours=(saved.cumHours && typeof saved.cumHours==='object')?saved.cumHours:{};
+    // Validate cumHours values are numbers
+    Object.keys(S.cumHours).forEach(function(k){
+      if(typeof S.cumHours[k]!=='number'||isNaN(S.cumHours[k])) S.cumHours[k]=0;
+    });
+  }catch(e){S.history={};S.cumHours={};}
 }
 
 /* ===== SCHEDULING ENGINE ===== */
-function getDeptShort(full){return DEPT_MAP[full]||full;}
+var _unknownDepts = new Set();
+function getDeptShort(full){
+  if(DEPT_MAP[full]) return DEPT_MAP[full];
+  if(full && !_unknownDepts.has(full)) { _unknownDepts.add(full); console.warn('未知科系對應：' + full); }
+  return full;
+}
 function isStudentFree(dept,weekday,slot){
+  // 週末無課程，視為全天可用（若未來有週末課程需調整此邏輯）
   if(weekday==='六'||weekday==='日')return true;
   var parts=slot.split('-'),ds=timeToMin(parts[0]),de=timeToMin(parts[1]);
   if(de<=ds)de+=1440;
@@ -388,7 +408,8 @@ function isStudentFree(dept,weekday,slot){
 }
 function getLastWeekIds(){var prev=S.history[S.weekNum-1];return prev?new Set(prev.ids):new Set();}
 function isNightSlot(slot){return timeToMin(slot.split('-')[0])>=1200;}
-function getStudentGender(id){var s=S.students.find(function(x){return x.id===id;});return s?s.gender:null;}
+/* Use studentMap for O(1) lookup instead of linear find() (Defect #22) */
+function getStudentGender(id){var s=S.studentMap[id];return s?s.gender:null;}
 function getAvailable(dutyType,day,slot,tempRelease){
   var def=DUTY_DEFS[dutyType],lastWeek=getLastWeekIds();
   return S.students.filter(function(s){
@@ -400,8 +421,30 @@ function getAvailable(dutyType,day,slot,tempRelease){
     return true;
   });
 }
+/*
+ * Cross-duty time conflict design note (Defect #4):
+ * Currently S.thisWeekIds ensures each person is assigned at most once per week,
+ * which inherently prevents any cross-duty time overlap. If the one-person-per-week
+ * rule is ever relaxed, the assignedSlots Map below tracks which day+slot each
+ * person has been given, so the candidate filter can reject overlapping assignments.
+ */
+/* Helper: check if a new slot overlaps any already-assigned slots for a person */
+function slotsOverlap(existingSlots,day,slot){
+  if(!existingSlots)return false;
+  var parts=slot.split('-'),ns=timeToMin(parts[0]),ne=timeToMin(parts[1]);
+  if(ne<=ns)ne+=1440;
+  for(var i=0;i<existingSlots.length;i++){
+    if(existingSlots[i].day!==day)continue;
+    var ep=existingSlots[i].slot.split('-'),es=timeToMin(ep[0]),ee=timeToMin(ep[1]);
+    if(ee<=es)ee+=1440;
+    if(ns<ee&&ne>es)return true;
+  }
+  return false;
+}
 function autoSchedule(){
-  S.assignments={};S.thisWeekIds=new Set();
+  S.assignments={};S.thisWeekIds=new Set();S.emptySlotCount=0;
+  /* Track assigned time slots per person for cross-duty conflict detection (Defect #4) */
+  var assignedSlots=new Map();
   var lastWeek=getLastWeekIds(),targets=[];
   /* Department proportional balancing: count pool size per dept */
   var deptSizes={},totalPool=0;
@@ -437,15 +480,19 @@ function autoSchedule(){
       if(S.thisWeekIds.has(s.id))return false;
       if(lastWeek.has(s.id))return false;
       if(!isStudentFree(s.dept,tg.day,tg.slot))return false;
+      /* Cross-duty time overlap guard (Defect #4): reject if slot overlaps an already-assigned slot */
+      if(slotsOverlap(assignedSlots.get(s.id),tg.day,tg.slot))return false;
       return true;
     });
     /* Weighted random: dept deficit as weight (proportional balance + randomness) */
+    /* Use a separate Map for weights to avoid polluting student objects (Defect #7) */
     if(cands.length>0){
+      var weights=new Map();
       var nA=S.thisWeekIds.size+1,totalW=0;
       cands.forEach(function(s){
         var dept=s.dept||'\u672A\u77E5';
         var deficit=totalPool?(deptSizes[dept]||1)/totalPool*nA-(deptAssigned[dept]||0):1;
-        s._w=Math.max(deficit,0.1);totalW+=s._w;
+        weights.set(s.id,Math.max(deficit,0.1));totalW+=weights.get(s.id);
       });
       /* 校巡: boost preferred gender for mixed pairing */
       if(tg.dtype==='\u6821\u5DE1'&&tg.idx>0){
@@ -454,16 +501,25 @@ function autoSchedule(){
         var hasF=assigned.some(function(p){return p&&getStudentGender(p.id)==='\u5973';});
         if(hasM||hasF){
           var prefer=hasM?'\u5973':'\u7537';
-          totalW=0;cands.forEach(function(s){if(s.gender===prefer)s._w*=3;totalW+=s._w;});
+          totalW=0;cands.forEach(function(s){var w=weights.get(s.id);if(s.gender===prefer)w*=3;weights.set(s.id,w);totalW+=w;});
         }
       }
       var rand=Math.random()*totalW,cum=0,c=cands[0];
-      for(var i=0;i<cands.length;i++){cum+=cands[i]._w;if(rand<cum){c=cands[i];break;}}
+      for(var i=0;i<cands.length;i++){cum+=weights.get(cands[i].id);if(rand<cum){c=cands[i];break;}}
       S.assignments[tg.dtype][tg.key].push({id:c.id,name:c.name});
       S.thisWeekIds.add(c.id);
+      /* Track assigned slot for cross-duty conflict detection (Defect #4) */
+      assignedSlots.set(c.id,(assignedSlots.get(c.id)||[]).concat([{day:tg.day,slot:tg.slot}]));
       var dept=c.dept||'\u672A\u77E5';deptAssigned[dept]=(deptAssigned[dept]||0)+1;
     }
   }
+  /* Count empty slots after scheduling completes (Defect #5) */
+  var emptyCount=0;
+  for(var t2=0;t2<targets.length;t2++){
+    var tg2=targets[t2];
+    if(!S.assignments[tg2.dtype][tg2.key]||S.assignments[tg2.dtype][tg2.key].length<=tg2.idx){emptyCount++;}
+  }
+  S.emptySlotCount=emptyCount;
 }
 
 /* ===== UI: Steps with animation ===== */
@@ -474,7 +530,7 @@ function showStep(ids){
     }
   });
   ids.forEach(function(id){
-    var el=$(id);
+    var el=byId(id);
     if(!el.classList.contains('active')){
       el.classList.add('active');
     }
@@ -483,7 +539,7 @@ function showStep(ids){
 
 /* ===== UI: Config ===== */
 function renderConfig(){
-  var grid=$('dutyGrid');clearEl(grid);
+  var grid=byId('dutyGrid');clearEl(grid);
   Object.keys(DUTY_DEFS).forEach(function(dtype){
     var def=DUTY_DEFS[dtype];
     var card=h('div',{className:'duty-card','data-duty':dtype});
@@ -529,11 +585,14 @@ function renderConfig(){
     ppInput.addEventListener('change',updateConfigSummary);
   });
   updateWeekDates();
-  $('weekNum').addEventListener('change',updateWeekDates);
+  byId('weekNum').addEventListener('change',updateWeekDates);
 }
 function updateWeekDates(){
-  S.weekNum=parseInt($('weekNum').value)||1;
-  $('weekDates').textContent=weekRange(S.weekNum);
+  /* Clamp weekNum to >= 1 to avoid undefined history lookups (Defect #6) */
+  var raw=parseInt(byId('weekNum').value)||1;
+  S.weekNum=Math.max(1,Math.min(20,raw));
+  if(raw!==S.weekNum)byId('weekNum').value=String(S.weekNum);
+  byId('weekDates').textContent=weekRange(S.weekNum);
   updateConfigSummary();
 }
 function updateConfigSummary(){
@@ -550,9 +609,9 @@ function updateConfigSummary(){
   var lastWeek=getLastWeekIds();
   var availM=S.students.filter(function(s){return s.gender==='男'&&!lastWeek.has(s.id);}).length;
   var availF=S.students.filter(function(s){return s.gender==='女'&&!lastWeek.has(s.id);}).length;
-  var bar=$('configSummary');
-  if(totalSlots===0){bar.style.display='none';$('btnSchedule').disabled=true;return;}
-  bar.style.display='flex';$('btnSchedule').disabled=false;
+  var bar=byId('configSummary');
+  if(totalSlots===0){bar.style.display='none';byId('btnSchedule').disabled=true;return;}
+  bar.style.display='flex';byId('btnSchedule').disabled=false;
   var ok=totalSlots<=(availM+availF)&&maleSlots<=availM;
   clearEl(bar);
   var items=[
@@ -582,7 +641,7 @@ function renderStatsBar(){
       tf+=filled;te+=Math.max(0,cfg.pp-filled);ts+=cfg.pp;
     });});
   });
-  var grid=$('statsGrid');clearEl(grid);
+  var grid=byId('statsGrid');clearEl(grid);
   [{v:ts,l:'總格數',c:'var(--gold)'},{v:tf,l:'已填入',c:'var(--success)'},{v:te,l:'空缺',c:te?'var(--danger)':'var(--text-d)'},{v:S.thisWeekIds.size,l:'本週排勤人數',c:'var(--info)'}].forEach(function(d){
     var card=h('div',{className:'stat-card'});
     var sv=h('div',{className:'sv',style:'color:'+d.c},'0');
@@ -594,7 +653,7 @@ function renderStatsBar(){
 }
 function renderResults(){
   renderStatsBar();
-  var tabBar=$('resultTabs'),panels=$('resultPanels');
+  var tabBar=byId('resultTabs'),panels=byId('resultPanels');
   clearEl(tabBar);clearEl(panels);
   var first=true;
   Object.keys(S.active).forEach(function(dtype){
@@ -611,7 +670,7 @@ function renderResults(){
     tabBar.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
     panels.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
     btn.classList.add('active');
-    $('panel-'+btn.getAttribute('data-duty')).classList.add('active');
+    byId('panel-'+btn.getAttribute('data-duty')).classList.add('active');
   });
 }
 function buildDutyTable(dtype){
@@ -638,7 +697,7 @@ function buildDutyTable(dtype){
           td.appendChild(h('div',{className:'pid'},String(person.id)));
           td.appendChild(h('div',{className:'pname'},person.name));
         }else{td.classList.add('empty-slot');td.textContent='+';}
-        (function(dt,dy,sl,pi){td.addEventListener('click',function(){openPicker(dt,dy,sl,pi);})})(dtype,day,slot,p);
+        (function(dt,dy,sl,pi,tdEl){td.addEventListener('click',function(){openPicker(dt,dy,sl,pi,tdEl);})})(dtype,day,slot,p,td);
         tr.appendChild(td);
       });
       tbody.appendChild(tr);
@@ -660,18 +719,18 @@ function getAllStudentsForPicker(dtype,day,slot,slotIds,current){
     var reasons=[];
     if(def.maleOnly&&s.gender!=='男')reasons.push('gender');
     if(dtype==='校巡'&&isNightSlot(slot)&&s.gender==='女')reasons.push('night');
-    if(S.thisWeekIds.has(s.id)&&!(tempRelease&&tempRelease.has(s.id)))reasons.push('used');
-    if(lastWeek.has(s.id))reasons.push('used');
+    if(S.thisWeekIds.has(s.id)&&!(tempRelease&&tempRelease.has(s.id)))reasons.push('thisWeek');
+    if(lastWeek.has(s.id))reasons.push('lastWeek');
     if(!isStudentFree(s.dept,day,slot))reasons.push('busy');
     return{id:s.id,name:s.name,dept:s.dept,gender:s.gender,reasons:reasons};
   });
 }
-function openPicker(dtype,day,slot,idx){
-  pickerCtx={dtype:dtype,day:day,slot:slot,idx:idx};
+function openPicker(dtype,day,slot,idx,tdEl){
+  pickerCtx={dtype:dtype,day:day,slot:slot,idx:idx,tdEl:tdEl};
   var def=DUTY_DEFS[dtype],key=day+'|'+slot;
   var arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
   var current=arr[idx];
-  $('pickerTitle').textContent=def.label+' | '+weekDate(S.weekNum,day)+'('+day+') '+fmtSlot(slot);
+  byId('pickerTitle').textContent=def.label+' | '+weekDate(S.weekNum,day)+'('+day+') '+fmtSlot(slot);
   var slotIds=new Set();arr.forEach(function(p,i){if(p&&i!==idx)slotIds.add(p.id);});
   var tempRelease=new Set();if(current)tempRelease.add(current.id);
   var candidates=getAvailable(dtype,day,slot,tempRelease).filter(function(s){return!slotIds.has(s.id);});
@@ -679,32 +738,32 @@ function openPicker(dtype,day,slot,idx){
   var allStudents=getAllStudentsForPicker(dtype,day,slot,slotIds,current);
   allStudents.sort(function(a,b){return(a.reasons.length-b.reasons.length)||(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);});
   var autoShowAll=candidates.length===0;
-  var cb=$('pickerShowAll');
+  var cb=byId('pickerShowAll');
   cb.checked=autoShowAll;
-  var toggle=$('pickerToggle');
+  var toggle=byId('pickerToggle');
   toggle.classList.toggle('auto',autoShowAll);
-  $('pickerToggleLabel').textContent=autoShowAll?'已自動開啟：無符合條件人員，顯示全部學員':'顯示全部學員（忽略限制）';
+  byId('pickerToggleLabel').textContent=autoShowAll?'已自動開啟：無符合條件人員，顯示全部學員':'顯示全部學員（忽略限制）';
   pickerState={candidates:candidates,allStudents:allStudents,current:current,showAll:autoShowAll};
   refreshPickerList();
-  $('pickerSearch').value='';
-  $('pickerModal').classList.add('show');
-  setTimeout(function(){$('pickerSearch').focus();},150);
-  $('pickerSearch').oninput=function(){refreshPickerList();};
+  byId('pickerSearch').value='';
+  byId('pickerModal').classList.add('show');
+  setTimeout(function(){byId('pickerSearch').focus();},150);
+  byId('pickerSearch').oninput=function(){refreshPickerList();};
   cb.onchange=function(){
     pickerState.showAll=cb.checked;
     toggle.classList.toggle('auto',false);
-    $('pickerToggleLabel').textContent='顯示全部學員（忽略限制）';
+    byId('pickerToggleLabel').textContent='顯示全部學員（忽略限制）';
     refreshPickerList();
   };
 }
 function refreshPickerList(){
-  var q=$('pickerSearch').value.trim().toLowerCase();
+  var q=byId('pickerSearch').value.trim().toLowerCase();
   var src=pickerState.showAll?pickerState.allStudents:pickerState.candidates;
   var filtered=q?src.filter(function(s){return String(s.id).indexOf(q)>=0||s.name.toLowerCase().indexOf(q)>=0||s.dept.toLowerCase().indexOf(q)>=0;}):src;
   renderPickerList(filtered,pickerState.current,pickerState.showAll);
 }
 function renderPickerList(candidates,current,showAll){
-  var list=$('pickerList');clearEl(list);
+  var list=byId('pickerList');clearEl(list);
   if(current){
     var clr=h('div',{className:'pk-clear'},'\u2715 清除此格（移除 '+current.id+' '+current.name+'）');
     clr.addEventListener('click',function(){assignPerson(null);closePicker();});
@@ -725,7 +784,8 @@ function renderPickerList(candidates,current,showAll){
       s.reasons.forEach(function(r){
         var badge=h('span',{className:'pk-badge '+r});
         if(r==='busy')badge.textContent='有課';
-        else if(r==='used')badge.textContent='已排';
+        else if(r==='thisWeek')badge.textContent='本週已排';
+        else if(r==='lastWeek')badge.textContent='上週已排';
         else if(r==='gender')badge.textContent='性別';
         else if(r==='night')badge.textContent='夜間';
         nameSpan.appendChild(badge);
@@ -760,11 +820,21 @@ function assignPerson(student){
     arr[ctx.idx]=undefined;
     showToast('已清除');
   }
-  var panel=$('panel-'+ctx.dtype);
-  if(panel){clearEl(panel);panel.appendChild(buildDutyTable(ctx.dtype));}
+  /* Update just the clicked cell instead of rebuilding the entire table (Defect #23) */
+  if(ctx.tdEl){
+    clearEl(ctx.tdEl);ctx.tdEl.className='person-cell';
+    if(student){
+      ctx.tdEl.classList.add('filled');
+      ctx.tdEl.appendChild(h('div',{className:'pid'},String(student.id)));
+      ctx.tdEl.appendChild(h('div',{className:'pname'},student.name));
+    }else{ctx.tdEl.classList.add('empty-slot');ctx.tdEl.textContent='+';}
+  }else{
+    var panel=byId('panel-'+ctx.dtype);
+    if(panel){clearEl(panel);panel.appendChild(buildDutyTable(ctx.dtype));}
+  }
   renderStatsBar();renderDashboard();
 }
-function closePicker(){$('pickerModal').classList.remove('show');pickerCtx=null;}
+function closePicker(){byId('pickerModal').classList.remove('show');pickerCtx=null;}
 
 /* ===== UI: Dashboard ===== */
 function renderDashboard(){
@@ -775,7 +845,7 @@ function renderDashboard(){
       (S.assignments[dtype][key]||[]).forEach(function(p){if(p)weekHrs[p.id]=(weekHrs[p.id]||0)+hrs;});
     });
   });
-  var dash=$('dashboard');clearEl(dash);
+  var dash=byId('dashboard');clearEl(dash);
   var assigned=S.students.filter(function(s){return weekHrs[s.id];});
   assigned.sort(function(a,b){return(weekHrs[b.id]||0)-(weekHrs[a.id]||0);});
   var maxH=1;assigned.forEach(function(s){if(weekHrs[s.id]>maxH)maxH=weekHrs[s.id];});
@@ -951,6 +1021,7 @@ function exportExcel(){
     ws['!merges']=merges;
 
     /* Apply styles */
+    var DATA_START_ROW = 3; // After title(0), date(1), weekday(2) rows
     var range=XLSX.utils.decode_range(ws['!ref']);
     for(var R=range.s.r;R<=range.e.r;R++){
       for(var C=range.s.c;C<=range.e.c;C++){
@@ -963,13 +1034,14 @@ function exportExcel(){
         else{
           /* dataRow%2: 0=name row, 1=signature row (same for horiz/vertical) */
           var isEmpty=(!ws[addr].v&&ws[addr].v!==0)||String(ws[addr].v).trim()==='';
-          if((R-3)%2===1){
+          if((R-DATA_START_ROW)%2===1){
             /* Signature row: check the name row above (R-1) to decide gray or white */
             var aboveAddr=XLSX.utils.encode_cell({r:R-1,c:C});
             var aboveCell=ws[aboveAddr];
             var nameEmpty=!aboveCell||(!aboveCell.v&&aboveCell.v!==0)||String(aboveCell.v).trim()==='';
             ws[addr].s=nameEmpty?sSigEmpty:sSig;
           }
+          /* C%2===1: odd columns are student IDs (each person = 2 cols: id + name) */
           else if(C%2===1){ws[addr].s=sId;if(!isEmpty)ws[addr].z='000';}
           else{ws[addr].s=isEmpty?sNameEmpty:sName;}
         }
@@ -1005,10 +1077,50 @@ function saveWeek(){
       (S.assignments[dtype][key]||[]).forEach(function(p){if(p)weekHrs[p.id]=(weekHrs[p.id]||0)+hrs;});
     });
   });
-  Object.keys(weekHrs).forEach(function(id){S.cumHours[id]=(S.cumHours[id]||0)+weekHrs[id];});
-  S.history[S.weekNum]={ids:Array.from(S.thisWeekIds)};
+
+  var isOverwrite = !!S.history[S.weekNum];
+  if(isOverwrite && !confirm('第 '+S.weekNum+' 週已儲存過，確定要覆蓋嗎？'))return;
+
+  S.history[S.weekNum]={ids:Array.from(S.thisWeekIds), hours:weekHrs};
+
+  // Recalculate cumHours from all saved weeks to prevent doubling
+  S.cumHours={};
+  Object.keys(S.history).forEach(function(wk){
+    var wkHrs=S.history[wk].hours||{};
+    Object.keys(wkHrs).forEach(function(id){
+      S.cumHours[id]=(S.cumHours[id]||0)+wkHrs[id];
+    });
+  });
+
   localStorage.setItem('dutySchedulerHistory',JSON.stringify({history:S.history,cumHours:S.cumHours}));
-  showToast('第 '+S.weekNum+' 週紀錄已儲存（'+S.thisWeekIds.size+' 人）');
+  showToast(isOverwrite?'第 '+S.weekNum+' 週紀錄已覆蓋':'第 '+S.weekNum+' 週紀錄已儲存（'+S.thisWeekIds.size+' 人）');
+}
+
+/* ===== BACKUP / RESTORE ===== */
+function exportBackup(){
+  var data=JSON.stringify({history:S.history,cumHours:S.cumHours},null,2);
+  var blob=new Blob([data],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='duty_backup_'+new Date().toISOString().slice(0,10)+'.json';
+  document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},500);
+  showToast('備份已匯出');
+}
+function importBackup(file){
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=JSON.parse(e.target.result);
+      if(!data.history||typeof data.history!=='object')throw new Error('無效的備份格式');
+      S.history=data.history;
+      S.cumHours=data.cumHours||{};
+      localStorage.setItem('dutySchedulerHistory',JSON.stringify({history:S.history,cumHours:S.cumHours}));
+      showToast('備份已匯入（'+Object.keys(S.history).length+' 週紀錄）');
+      updateConfigSummary();
+    }catch(err){showToast('匯入失敗：'+err.message);}
+  };
+  reader.readAsText(file);
 }
 
 /* ===== INIT ===== */
@@ -1018,29 +1130,41 @@ function handleFile(file){
     try{
       var wb=XLSX.read(e.target.result);loadWorkbook(wb);
       if(S.students.length===0)throw new Error('找不到勤務時數總表');
-      var status=$('importStatus');clearEl(status);
+      var status=byId('importStatus');clearEl(status);
       var div=h('div',{className:'import-ok'},
         '\u2713 匯入成功：'+S.students.length+' 位學員（男 '+S.students.filter(function(s){return s.gender==='男';}).length+' / 女 '+S.students.filter(function(s){return s.gender==='女';}).length+'），'+Object.keys(S.freePeriods).length+' 天空堂資料');
       status.appendChild(div);
+      var details=h('details',{style:'margin-top:10px'});
+      var summary=h('summary',{style:'cursor:pointer;color:var(--gold);font-size:.88rem'},'查看學員名冊');
+      details.appendChild(summary);
+      var rosterDiv=h('div',{style:'max-height:300px;overflow-y:auto;margin-top:8px;font-size:.82rem'});
+      S.students.forEach(function(s){
+        rosterDiv.appendChild(h('div',{style:'padding:2px 0;border-bottom:1px solid var(--border)'},s.id+' '+s.name+' ('+s.gender+') '+s.dept));
+      });
+      details.appendChild(rosterDiv);
+      status.appendChild(details);
       showStep(['stepImport','stepConfig']);
       updateConfigSummary();showToast('匯入成功');
     }catch(err){
-      var status=$('importStatus');clearEl(status);
-      status.appendChild(h('div',{className:'import-err'},'\u2715 匯入失敗：'+err.message));
+      var msg = err.message;
+      if(msg.indexOf('找不到')>=0) msg = '找不到「勤務時數總表」工作表，請確認 Excel 檔案格式正確';
+      else if(msg.indexOf('File is not')>=0 || msg.indexOf('Unsupported')>=0) msg = '不是有效的 Excel 檔案，請選擇 .xlsx 格式';
+      var status=byId('importStatus');clearEl(status);
+      status.appendChild(h('div',{className:'import-err'},'\u2715 匯入失敗：'+msg));
     }
   };
   reader.readAsArrayBuffer(file);
 }
 function init(){
   renderConfig();
-  var dz=$('dropZone'),fi=$('fileInput');
+  var dz=byId('dropZone'),fi=byId('fileInput');
   dz.addEventListener('click',function(){fi.click();});
   dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('dragover');});
   dz.addEventListener('dragleave',function(){dz.classList.remove('dragover');});
   dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('dragover');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
   fi.addEventListener('change',function(){if(fi.files[0])handleFile(fi.files[0]);});
-  $('btnSchedule').addEventListener('click',function(){
-    var btn=$('btnSchedule');
+  byId('btnSchedule').addEventListener('click',function(){
+    var btn=byId('btnSchedule');
     btn.disabled=true;
     var spinner=h('span',{className:'spinner'});
     btn.insertBefore(spinner,btn.firstChild);
@@ -1050,15 +1174,22 @@ function init(){
       showStep(['stepImport','stepConfig','stepResults','stepDashboard']);
       btn.removeChild(spinner);
       btn.disabled=false;
-      $('stepResults').scrollIntoView({behavior:'smooth'});
+      /* Warn if any slots could not be filled (Defect #5) */
+      if(S.emptySlotCount>0){
+        setTimeout(function(){showToast('\u8B66\u544A\uFF1A\u6709 '+S.emptySlotCount+' \u500B\u6642\u6BB5\u7121\u6CD5\u6392\u4EBA\uFF0C\u8ACB\u624B\u52D5\u88DC\u9F4A');},100);
+      }
+      byId('stepResults').scrollIntoView({behavior:'smooth'});
     },300);
   });
-  $('btnReimport').addEventListener('click',function(){showStep(['stepImport']);});
-  $('btnReconfig').addEventListener('click',function(){showStep(['stepImport','stepConfig']);});
-  $('btnExport').addEventListener('click',exportExcel);
-  $('btnSave').addEventListener('click',saveWeek);
-  $('pickerClose').addEventListener('click',closePicker);
-  $('pickerModal').addEventListener('click',function(e){if(e.target===$('pickerModal'))closePicker();});
+  byId('btnReimport').addEventListener('click',function(){showStep(['stepImport']);});
+  byId('btnReconfig').addEventListener('click',function(){showStep(['stepImport','stepConfig']);});
+  byId('btnExport').addEventListener('click',exportExcel);
+  byId('btnSave').addEventListener('click',saveWeek);
+  byId('btnBackup').addEventListener('click',exportBackup);
+  byId('restoreInput').addEventListener('change',function(){if(this.files[0])importBackup(this.files[0]);});
+  byId('btnRestore').addEventListener('click',function(){byId('restoreInput').click();});
+  byId('pickerClose').addEventListener('click',closePicker);
+  byId('pickerModal').addEventListener('click',function(e){if(e.target===byId('pickerModal'))closePicker();});
   document.addEventListener('keydown',function(e){if(e.key==='Escape')closePicker();});
 }
 document.addEventListener('DOMContentLoaded',init);
