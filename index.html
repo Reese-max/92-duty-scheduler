@@ -1090,7 +1090,7 @@ function exportExcel(){
   var bdrName={top:bM,bottom:bM,left:bT,right:bM};
   /* Fixed styles (same across all duty types) */
   var sId={font:{sz:24,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrId,fill:{patternType:'solid',fgColor:{rgb:'D8D8D8'}}};
-  var sName={font:{sz:24,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName};
+  var sName={font:{sz:24,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
   var sSig={font:{sz:10,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
   /* Gray-fill variants for empty (unfilled) cells */
   var grayFill={patternType:'solid',fgColor:{rgb:'D8D8D8'}};
@@ -1211,11 +1211,14 @@ function exportExcel(){
         else if(R>=noteR){ws[addr].s=sNote;}
         else if(C===0){ws[addr].s=sTime;}
         else{
-          /* dataRow%2: 0=name row, 1=signature row (same for horiz/vertical) */
-          if((R-3)%2===1){ws[addr].s=sSig;}
+          /* 判斷此格是否為空（無人指派）*/
+          var nameR=(R-3)%2===1?R-1:R;
+          var idC=(C-1)%2===0?C:C-1;
+          var idAddr=XLSX.utils.encode_cell({r:nameR,c:idC});
+          var slotEmpty=!ws[idAddr]||!ws[idAddr].v;
+          if((R-3)%2===1){ws[addr].s=slotEmpty?sSigEmpty:sSig;}
           else if((C-1)%2===0){ws[addr].s=sId;ws[addr].z='000';}
-          else{ws[addr].s=sName;}
-          /* TODO: holiday handling — merge cells + grey fill + "放假" text for non-duty days */
+          else{ws[addr].s=slotEmpty?sNameEmpty:sName;}
         }
       }
     }
