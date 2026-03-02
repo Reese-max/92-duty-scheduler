@@ -1092,6 +1092,8 @@ function exportExcel(){
   var grayFill={patternType:'solid',fgColor:{rgb:'D8D8D8'}};
   /* Per-sheet font sizes: {title, hdrLabel(col A), dateVal, dayVal(weekday), time, data(ID/Name), note} */
   var FONT_SIZES={'\u503C\u73ED':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u591C\u5DE1':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u9031\u9593':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u6821\u5DE1':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16},'\u5BE2\u5DE1':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u8B66\u6280\u9928':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u76E3\u5EDA':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20},'\u7E3D\u968A\u503C\u661F':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20}};
+  /* Column widths per duty type (matching reference ODS) */
+  var COL_WIDTHS={'\u503C\u73ED':{time:9,id:7,name:14},'\u591C\u5DE1':{time:11,id:7,name:14},'\u9031\u9593':{time:11,id:7,name:14},'\u6821\u5DE1':{time:13,id:7,name:11},'\u5BE2\u5DE1':{time:11,id:7,name:14},'\u8B66\u6280\u9928':{time:11,id:7,name:14},'\u76E3\u5EDA':{time:19,id:8,name:12},'\u7E3D\u968A\u503C\u661F':{time:9,id:7,name:21}};
   /* Time slot font override: \u5BE2\u5DE1/\u8B66\u6280\u9928 use \u6A19\u6977\u9AD4-\u7E41 */
   var TIME_FONT={'\u5BE2\u5DE1':'\u6A19\u6977\u9AD4-\u7E41','\u8B66\u6280\u9928':'\u6A19\u6977\u9AD4-\u7E41'};
   /* Slot format: raw=no colons, fullwidth=\uFF1A+newline, halfwidth=default */
@@ -1226,11 +1228,12 @@ function exportExcel(){
       }
     }
 
-    /* Column widths */
-    var cw=[{wch:15}];
+    /* Column widths (per duty type, matching reference ODS) */
+    var cwDef=COL_WIDTHS[dtype]||{time:11,id:7,name:14};
+    var cw=[{wch:cwDef.time}];
     for(var i=0;i<days.length;i++){
-      if(horiz){for(var p=0;p<pp;p++)cw.push({wch:9},{wch:16});}
-      else{cw.push({wch:9},{wch:18});}
+      if(horiz){for(var p=0;p<pp;p++)cw.push({wch:cwDef.id},{wch:cwDef.name});}
+      else{cw.push({wch:cwDef.id},{wch:cwDef.name});}
     }
     ws['!cols']=cw;
     ws['!rows']=rh;
