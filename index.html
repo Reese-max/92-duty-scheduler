@@ -403,6 +403,14 @@ function getAvailable(dutyType,day,slot,tempRelease){
 function autoSchedule(){
   S.assignments={};S.thisWeekIds=new Set();
   var lastWeek=getLastWeekIds(),targets=[];
+  /* Department proportional balancing: count pool size per dept */
+  var deptSizes={},totalPool=0;
+  S.students.forEach(function(s){
+    if(lastWeek.has(s.id))return;
+    var dept=s.dept||'\u672A\u77E5';
+    deptSizes[dept]=(deptSizes[dept]||0)+1;totalPool++;
+  });
+  var deptAssigned={};
   Object.keys(S.active).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
     S.assignments[dtype]={};
@@ -431,7 +439,15 @@ function autoSchedule(){
       if(!isStudentFree(s.dept,tg.day,tg.slot))return false;
       return true;
     });
-    cands.sort(function(a,b){return(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);});
+    /* Sort by dept deficit (under-represented depts first), then cumulative hours */
+    var nA=S.thisWeekIds.size+1;
+    cands.sort(function(a,b){
+      var dA=a.dept||'\u672A\u77E5',dB=b.dept||'\u672A\u77E5';
+      var defA=totalPool?(deptSizes[dA]||1)/totalPool*nA-(deptAssigned[dA]||0):0;
+      var defB=totalPool?(deptSizes[dB]||1)/totalPool*nA-(deptAssigned[dB]||0):0;
+      if(Math.abs(defA-defB)>0.01)return defB-defA;
+      return(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);
+    });
     if(tg.dtype==='校巡'&&tg.idx>0&&cands.length>0){
       var assigned=S.assignments[tg.dtype][tg.key];
       var hasM=assigned.some(function(p){return p&&getStudentGender(p.id)==='男';});
@@ -447,6 +463,7 @@ function autoSchedule(){
       var c=cands[0];
       S.assignments[tg.dtype][tg.key].push({id:c.id,name:c.name});
       S.thisWeekIds.add(c.id);
+      var dept=c.dept||'\u672A\u77E5';deptAssigned[dept]=(deptAssigned[dept]||0)+1;
     }
   }
 }
