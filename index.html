@@ -2,10 +2,10 @@
 <html lang="zh-TW">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>92期1隊 半自動勤排系統</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js" integrity="sha384-OUW9euuUyxyHcAhTqbhI+Iyb8LMssXt/cpz0yXhs9UWG2/R/uaWdakx/4cfww7Vb" crossorigin="anonymous"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -19,7 +19,7 @@
   --success:#27ae60;--warning:#f39c12;--danger:#e74c3c;--info:#3498db;
   --radius:12px;--shadow:0 8px 32px rgba(0,0,0,.5);
 }
-body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh}
+body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh;overflow-x:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
 
 /* === Custom Scrollbar === */
 ::-webkit-scrollbar{width:8px;height:8px}
@@ -100,6 +100,12 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .btn-danger-outline{background:transparent;border:1.5px solid rgba(231,76,60,.3);color:var(--text-m)}.btn-danger-outline:hover{border-color:var(--danger);color:var(--danger);background:rgba(231,76,60,.05)}
 .btn:disabled{opacity:.4;cursor:not-allowed;transform:none!important;box-shadow:none!important}
 .btn-row{display:flex;gap:12px;flex-wrap:wrap}
+.btn-sm{font-size:.82rem;padding:6px 14px}
+.lastweek-upload{margin:10px 0 16px;padding:12px 16px;background:rgba(52,152,219,.08);border:1px solid rgba(52,152,219,.2);border-radius:10px}
+.lastweek-label{font-size:.9rem;color:var(--gold);font-weight:500}
+.lastweek-row{display:flex;align-items:center;gap:12px;margin-top:8px}
+.lastweek-status{font-size:.82rem;color:var(--text-m)}
+.lastweek-status.loaded{color:var(--success)}
 
 /* === Tabs === */
 .tab-bar{display:flex;gap:4px;border-bottom:2px solid var(--border);margin-bottom:18px;overflow-x:auto;position:relative}
@@ -117,7 +123,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .dtbl tbody tr{transition:background .15s ease}
 .dtbl tbody tr:hover{background:#eef3fb}
 .dtbl .time-cell{background:#f2f2f2;color:#111;font-weight:700;font-size:.82rem;padding:8px 10px;white-space:pre-line;min-width:78px;position:sticky;left:0;z-index:1;border-right:2px solid #333}
-.person-cell{padding:8px 6px;min-width:86px;min-height:42px;cursor:pointer;transition:all .15s ease;background:#fff}
+.person-cell{padding:8px 6px;min-width:86px;min-height:44px;cursor:pointer;transition:all .15s ease;background:#fff}
 .person-cell:hover{background:#dbeafe;box-shadow:inset 0 0 0 2px #3b82f6}
 .person-cell.filled{background:#fff}
 .person-cell.empty-slot{color:#999;font-size:1.1rem;border:1px dashed #bbb;background:#fafafa;animation:emptyPulse 2.5s ease-in-out infinite}
@@ -148,7 +154,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 
 /* === Modal with animation === */
 .modal-overlay{position:fixed;inset:0;background:rgba(0,0,0,.75);backdrop-filter:blur(8px);z-index:200;display:flex;align-items:center;justify-content:center;padding:16px;opacity:0;visibility:hidden;transition:opacity .25s ease,visibility .25s ease}
-.modal-overlay.show{opacity:1;visibility:visible}
+.modal-overlay.show{opacity:1;visibility:visible;overscroll-behavior:contain}
 .modal{background:var(--card-l);border:1px solid var(--border-l);border-radius:14px;width:100%;max-width:520px;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 20px 60px rgba(0,0,0,.5),0 0 0 1px rgba(255,255,255,.05);transform:scale(.92) translateY(10px);transition:transform .25s ease;overflow:hidden}
 .modal-overlay.show .modal{transform:scale(1) translateY(0)}
 .modal-head{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
@@ -161,7 +167,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .modal-search input{width:100%;padding:11px 16px 11px 42px;border:1px solid var(--border-l);border-radius:8px;background:rgba(255,255,255,.06);color:var(--text);font-size:.9rem;transition:border-color .2s,box-shadow .2s}
 .modal-search input:focus{outline:none;border-color:var(--gold);box-shadow:0 0 0 3px rgba(212,168,67,.12)}
 .modal-search input::placeholder{color:var(--text-d)}
-.picker-list{overflow-y:auto;flex:1;padding:4px 8px 12px}
+.picker-list{overflow-y:auto;flex:1;padding:4px 8px 12px;overscroll-behavior:contain}
 .pk-item{display:flex;align-items:center;gap:12px;padding:11px 14px;border-radius:8px;cursor:pointer;transition:all .15s;border-bottom:1px solid rgba(255,255,255,.04)}
 .pk-item:last-child{border-bottom:none}
 .pk-item:hover{background:rgba(42,82,152,.2);transform:translateX(2px)}
@@ -169,8 +175,9 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .pk-name{font-weight:500}
 .pk-dept{font-size:.8rem;color:var(--text-m)}
 .pk-hrs{margin-left:auto;font-size:.8rem;color:var(--text-m);background:rgba(255,255,255,.05);padding:2px 8px;border-radius:10px}
-.pk-clear{padding:12px 14px;color:var(--danger);cursor:pointer;border-radius:8px;font-size:.88rem;text-align:center;border-bottom:1px solid rgba(231,76,60,.15);margin-bottom:4px;transition:all .15s}
-.pk-clear:hover{background:rgba(231,76,60,.08)}
+.pk-hint{padding:8px 14px;color:var(--text-m);font-size:.78rem;text-align:center;border-bottom:1px solid var(--border);margin-bottom:2px}
+.pk-clear{padding:12px 14px;color:#fff;background:rgba(231,76,60,.2);cursor:pointer;border-radius:8px;font-size:.92rem;font-weight:500;text-align:center;border:1px solid rgba(231,76,60,.35);margin:0 12px 0;transition:all .15s}
+.pk-clear:hover{background:rgba(231,76,60,.35);border-color:rgba(231,76,60,.5)}
 .pk-empty{padding:32px 20px;text-align:center;color:var(--text-d);font-size:.9rem}
 .pk-empty::before{content:'📭';display:block;font-size:2rem;margin-bottom:8px}
 .pk-toggle{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:.82rem;color:var(--text-m);cursor:pointer;user-select:none}
@@ -178,7 +185,8 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .pk-toggle.auto{color:var(--gold)}
 .pk-badge{font-size:.7rem;padding:1px 6px;border-radius:8px;margin-left:4px;font-weight:600}
 .pk-badge.busy{background:rgba(231,76,60,.18);color:#e74c3c}
-.pk-badge.used{background:rgba(243,156,18,.18);color:#f39c12}
+.pk-badge.thisWeek{background:rgba(243,156,18,.18);color:#f39c12}
+.pk-badge.lastWeek{background:rgba(52,152,219,.18);color:#3498db}
 .pk-badge.gender{background:rgba(155,89,182,.18);color:#9b59b6}
 .pk-item.forced{opacity:.8;border-left:3px solid var(--gold)}
 
@@ -194,14 +202,126 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 @keyframes emptyPulse{0%,100%{opacity:.6}50%{opacity:1}}
 @keyframes countUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 
+/* === Touch & Scroll Optimization === */
+.tbl-wrap,.tab-bar,.picker-list{-webkit-overflow-scrolling:touch;scroll-behavior:smooth}
+.tbl-outer{position:relative}
+.tbl-scroll-hint{display:none}
+@media(max-width:600px){
+  .tbl-scroll-hint{display:flex;align-items:center;justify-content:center;position:absolute;right:0;top:0;bottom:0;width:36px;pointer-events:none;background:linear-gradient(to right,transparent 0%,rgba(0,0,0,.5) 100%);z-index:3;border-radius:0 6px 6px 0;transition:opacity .3s}
+  .tbl-scroll-hint::after{content:'\203A';font-size:1.8rem;color:rgba(255,255,255,.85);animation:hintBounce 1.5s ease-in-out infinite;text-shadow:0 1px 3px rgba(0,0,0,.5)}
+  @keyframes hintBounce{0%,100%{transform:translateX(0)}50%{transform:translateX(4px)}}
+  .tbl-scroll-hint.hidden{opacity:0}
+  .tab-bar{position:relative}
+  .tab-bar::after{content:'';position:absolute;right:0;top:0;bottom:2px;width:32px;pointer-events:none;background:linear-gradient(to right,transparent,var(--bg));z-index:1}
+}
+
 /* === Responsive === */
 @media(max-width:600px){
-  header{padding:12px 16px}header h1{font-size:1.1rem}
-  .step{padding:18px 14px;margin-bottom:20px}
-  .duty-grid{grid-template-columns:1fr}
-  .summary-bar{flex-direction:column;gap:8px}
-  .stats-grid{grid-template-columns:repeat(2,1fr)}
-  .btn{padding:10px 20px;font-size:.9rem}
+  /* Header */
+  header{padding:10px 14px}
+  header h1{font-size:1rem;letter-spacing:0}
+  header h1 em{font-size:.7em;margin-left:6px}
+  header .ver{font-size:.68rem;padding:2px 8px}
+
+  /* Main layout */
+  main{padding:16px 10px 60px}
+
+  /* Steps */
+  .step{padding:16px 12px;margin-bottom:16px}
+  .step h2{font-size:1.05rem;margin-bottom:14px}
+  .step h3{font-size:.92rem;margin:14px 0 10px}
+
+  /* Drop zone — compact for mobile */
+  .drop-zone{padding:32px 16px}
+  .drop-zone p{font-size:.95rem}
+
+  /* Week row */
+  .week-row{gap:10px}
+  .week-row label{font-size:.88rem}
+  .week-row .dates{font-size:.85rem}
+  .week-row input[type=number]{min-height:44px;padding:10px 10px}
+
+  /* Last week upload */
+  .lastweek-upload{padding:10px 12px}
+  .lastweek-row{flex-wrap:wrap;gap:8px}
+  .lastweek-status{font-size:.78rem}
+
+  /* Duty grid — single column */
+  .duty-grid{grid-template-columns:1fr;gap:10px}
+  .duty-card{padding:14px 12px}
+  .duty-card .dc-check{width:26px;height:26px;font-size:1rem}
+  .dc-config input[type=number]{min-height:44px;padding:10px 8px}
+  .dc-config .day-toggles{gap:4px}
+  .day-tog{padding:8px 14px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;font-size:.84rem}
+
+  /* Summary bar */
+  .summary-bar{flex-direction:column;gap:8px;padding:12px 14px}
+
+  /* Buttons — ensure 44px touch target */
+  .btn{padding:12px 20px;font-size:.9rem;min-height:44px}
+  .btn-sm{padding:10px 16px;min-height:44px;font-size:.84rem}
+  .btn-row{gap:8px}
+
+  /* Stats grid — 2 columns */
+  .stats-grid{grid-template-columns:repeat(2,1fr);gap:8px}
+  .stat-card{padding:12px 10px}
+  .stat-card .sv{font-size:1.6rem}
+  .stat-card .sl{font-size:.75rem}
+
+  /* Tabs — ensure touch-friendly */
+  .tab-bar{gap:2px;-webkit-overflow-scrolling:touch}
+  .tab-btn{padding:12px 16px;font-size:.86rem;min-height:44px}
+
+  /* Table cells — touch-friendly */
+  .person-cell{min-width:78px;min-height:48px;padding:6px 4px}
+  .dtbl .time-cell{min-width:68px;font-size:.78rem;padding:6px 8px}
+  .dtbl th{padding:8px 6px;font-size:.8rem}
+  .pid{font-size:.82rem}
+  .pname{font-size:.75rem}
+
+  /* Hours dashboard */
+  .hc-row .hc-name{min-width:70px;font-size:.75rem}
+  .hc-row .hc-val{min-width:32px;font-size:.75rem}
+  .hc-row .hc-bar-wrap{height:16px}
+
+  /* Modal — near full-screen on mobile */
+  .modal-overlay{padding:8px}
+  .modal{max-width:100%;max-height:92vh;border-radius:12px}
+  .modal-head{padding:14px 16px}
+  .modal-head h3{font-size:.98rem}
+  .modal-head .btn-x{font-size:1.6rem;padding:8px 12px;min-width:44px;min-height:44px;display:flex;align-items:center;justify-content:center}
+  .modal-search{padding:10px 14px}
+  .modal-search input{padding:12px 14px 12px 40px;font-size:1rem;min-height:44px}
+  .picker-list{padding:4px 6px 12px}
+  .pk-item{padding:14px 12px;gap:10px;min-height:48px}
+  .pk-id{min-width:32px;font-size:.85rem}
+  .pk-name{font-size:.9rem}
+  .pk-dept{font-size:.76rem}
+  .pk-hrs{font-size:.76rem}
+  .pk-toggle{padding:10px 12px;font-size:.84rem;min-height:44px}
+  .pk-clear{padding:14px 12px;font-size:.88rem;min-height:44px}
+  .pk-hint{padding:10px 12px;font-size:.8rem}
+  .pk-badge{font-size:.66rem}
+
+  /* Toast — avoid bottom nav overlap */
+  .toast{bottom:16px;padding:12px 20px;font-size:.88rem;max-width:calc(100vw - 32px)}
+}
+
+/* Small phones (iPhone SE, etc.) */
+@media(max-width:375px){
+  header h1{font-size:.92rem}
+  header h1 em{display:none}
+  main{padding:12px 8px 50px}
+  .step{padding:14px 10px}
+  .stats-grid{grid-template-columns:1fr 1fr;gap:6px}
+  .stat-card .sv{font-size:1.4rem}
+  .btn{padding:10px 16px;font-size:.86rem}
+  .btn-row{flex-direction:column}
+  .btn-row .btn{width:100%}
+  .hc-row .hc-name{min-width:56px;font-size:.7rem}
+  .modal{max-height:95vh}
+  .week-row{flex-direction:column;align-items:flex-start;gap:8px}
+  .lastweek-row{flex-direction:column;align-items:flex-start}
 }
 </style>
 </head>
@@ -226,11 +346,19 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
       <label>第 <input type="number" id="weekNum" min="1" max="20" value="1"> 週</label>
       <span class="dates" id="weekDates"></span>
     </div>
+    <div class="lastweek-upload" id="lastWeekUpload">
+      <label class="lastweek-label">上週排班表（可選）</label>
+      <div class="lastweek-row">
+        <button class="btn btn-outline btn-sm" id="btnUploadLastWeek">上傳上週 Excel</button>
+        <input type="file" id="lastWeekFile" accept=".xlsx,.xls" style="display:none">
+        <span class="lastweek-status" id="lastWeekStatus">未載入</span>
+      </div>
+    </div>
     <h3>選擇本週要排的勤務</h3>
     <div class="duty-grid" id="dutyGrid"></div>
     <div class="summary-bar" id="configSummary" style="display:none"></div>
     <div class="btn-row">
-      <button class="btn btn-gold" id="btnSchedule" disabled>自動排勤</button>
+      <button class="btn btn-gold" id="btnSchedule" disabled>產生勤務表</button>
       <button class="btn btn-outline" id="btnReimport">重新匯入</button>
     </div>
   </section>
@@ -240,6 +368,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
     <div class="tab-bar" id="resultTabs"></div>
     <div id="resultPanels"></div>
     <div class="btn-row" style="margin-top:18px">
+      <button class="btn btn-gold" id="btnFillEmpty">隨機填滿空格</button>
       <button class="btn btn-gold" id="btnExport">匯出 Excel</button>
       <button class="btn btn-blue" id="btnSave">儲存本週紀錄</button>
       <button class="btn btn-danger-outline" id="btnReconfig">重新設定</button>
@@ -258,6 +387,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
     </div>
     <div class="modal-search"><input type="text" id="pickerSearch" placeholder="搜尋學號或姓名..."></div>
     <label class="pk-toggle" id="pickerToggle"><input type="checkbox" id="pickerShowAll"><span id="pickerToggleLabel">顯示全部學員（忽略限制）</span></label>
+    <div id="pickerClearRow" style="display:none"></div>
     <div class="picker-list" id="pickerList"></div>
   </div>
 </div>
@@ -304,7 +434,7 @@ var DUTY_DEFS={
 };
 
 /* ===== STATE ===== */
-var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},workbook:null};
+var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},workbook:null,savedWeeks:new Set()};
 
 /* ===== UTILS ===== */
 function $(id){return document.getElementById(id);}
@@ -312,9 +442,9 @@ function showToast(msg){var t=$('toast');t.textContent=msg;t.classList.add('show
 function timeToMin(t){return parseInt(t.slice(0,2))*60+parseInt(t.slice(2));}
 function slotHours(slot){var p=slot.split('-'),s=timeToMin(p[0]),e=timeToMin(p[1]);if(e<=s)e+=1440;return(e-s)/60;}
 function fmtSlot(slot){var p=slot.split('-');return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
-function dayOffset(day){var m={'一':0,'二':1,'三':2,'四':3,'五':4,'六':5,'日':-1};return m[day]!=null?m[day]:0;}
+function dayOffset(day){var m={'一':0,'二':1,'三':2,'四':3,'五':4,'六':5,'日':6};return m[day]!=null?m[day]:0;}
 function weekDate(wn,day){var d=new Date(SEMESTER_START);d.setDate(d.getDate()+(wn-1)*7+dayOffset(day));return(d.getMonth()+1)+'月'+d.getDate()+'日';}
-function weekRange(wn){return weekDate(wn,'一')+' — '+weekDate(wn,'五');}
+function weekRange(wn){return weekDate(wn,'一')+' — '+weekDate(wn,'日');}
 
 /* ===== Count-up Animation ===== */
 function animateCount(el,target){
@@ -368,7 +498,7 @@ function loadWorkbook(wb){
     if(type==='時數')S.students=parseRoster(ws);
     else if(type==='空堂')S.freePeriods=parseFreePeriods(ws);
   }
-  try{var saved=JSON.parse(localStorage.getItem('dutySchedulerHistory')||'{}');S.history=saved.history||{};S.cumHours=saved.cumHours||{};}catch(e){}
+  try{var saved=JSON.parse(localStorage.getItem('dutySchedulerHistory')||'{}');S.history=saved.history||{};S.cumHours=saved.cumHours||{};if(saved.assignments){S.assignments=saved.assignments;S.thisWeekIds=new Set();Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){(S.assignments[dt][k]||[]).forEach(function(p){if(p)S.thisWeekIds.add(p.id);});});});}}catch(e){}
 }
 
 /* ===== SCHEDULING ENGINE ===== */
@@ -377,7 +507,7 @@ function isStudentFree(dept,weekday,slot){
   if(weekday==='六'||weekday==='日')return true;
   var parts=slot.split('-'),ds=timeToMin(parts[0]),de=timeToMin(parts[1]);
   if(de<=ds)de+=1440;
-  if(de<=360||ds>=1080||ds>=1320)return true;
+  if(de<=360||ds>=1080)return true;
   var wk='週'+weekday,entries=S.freePeriods[wk]||[],sd=getDeptShort(dept);
   for(var i=0;i<entries.length;i++){
     var ep=entries[i].time.split('-'),es=timeToMin(ep[0]),ee=timeToMin(ep[1]);
@@ -387,6 +517,23 @@ function isStudentFree(dept,weekday,slot){
   return true;
 }
 function getLastWeekIds(){var prev=S.history[S.weekNum-1];return prev?new Set(prev.ids):new Set();}
+function parseLastWeekExcel(wb){
+  var studentIds=new Set(S.students.map(function(s){return s.id;}));
+  var found=new Set();
+  wb.SheetNames.forEach(function(name){
+    var ws=wb.Sheets[name];
+    var range=XLSX.utils.decode_range(ws['!ref']||'A1');
+    for(var R=range.s.r;R<=range.e.r;R++){
+      for(var C=range.s.c;C<=range.e.c;C++){
+        var cell=ws[XLSX.utils.encode_cell({r:R,c:C})];
+        if(!cell)continue;
+        var v=(cell.t==='n')?cell.v:parseInt(cell.v);
+        if(v&&studentIds.has(v))found.add(v);
+      }
+    }
+  });
+  return Array.from(found);
+}
 function isNightSlot(slot){return timeToMin(slot.split('-')[0])>=1200;}
 function getStudentGender(id){var s=S.students.find(function(x){return x.id===id;});return s?s.gender:null;}
 function getAvailable(dutyType,day,slot,tempRelease){
@@ -400,15 +547,35 @@ function getAvailable(dutyType,day,slot,tempRelease){
     return true;
   });
 }
-function autoSchedule(){
+function generateEmptySchedule(){
   S.assignments={};S.thisWeekIds=new Set();
-  var lastWeek=getLastWeekIds(),targets=[];
   Object.keys(S.active).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
     S.assignments[dtype]={};
     cfg.days.forEach(function(day){
       def.slots.forEach(function(slot){
-        var key=day+'|'+slot;S.assignments[dtype][key]=[];
+        var key=day+'|'+slot;
+        S.assignments[dtype][key]=[];
+        for(var i=0;i<cfg.pp;i++){S.assignments[dtype][key].push(undefined);}
+      });
+    });
+  });
+}
+function fillRemainingSlots(){
+  /* 收集已手動指派的人到 thisWeekIds */
+  S.thisWeekIds=new Set();
+  Object.keys(S.assignments).forEach(function(dtype){
+    Object.keys(S.assignments[dtype]).forEach(function(key){
+      (S.assignments[dtype][key]||[]).forEach(function(p){if(p)S.thisWeekIds.add(p.id);});
+    });
+  });
+  var lastWeek=getLastWeekIds(),targets=[];
+  Object.keys(S.active).forEach(function(dtype){
+    var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
+    cfg.days.forEach(function(day){
+      def.slots.forEach(function(slot){
+        var key=day+'|'+slot;
+        if(!S.assignments[dtype][key])S.assignments[dtype][key]=[];
         var eligible=S.students.filter(function(s){
           if(def.maleOnly&&s.gender!=='男')return false;
           if(dtype==='校巡'&&isNightSlot(slot)&&s.gender==='女')return false;
@@ -416,12 +583,33 @@ function autoSchedule(){
           if(!isStudentFree(s.dept,day,slot))return false;
           return true;
         }).length;
-        for(var i=0;i<cfg.pp;i++){targets.push({dtype:dtype,day:day,slot:slot,key:key,idx:i,eligible:eligible});}
+        for(var i=0;i<cfg.pp;i++){
+          if(!S.assignments[dtype][key][i]){
+            targets.push({dtype:dtype,day:day,slot:slot,key:key,idx:i,eligible:eligible});
+          }
+        }
       });
     });
   });
   targets.sort(function(a,b){return a.eligible-b.eligible;});
+  var fillCount=0;
   for(var t=0;t<targets.length;t++){
+    if(fillCount>0&&fillCount%10===0){
+      for(var rt=t;rt<targets.length;rt++){
+        var rtg=targets[rt],rdef=DUTY_DEFS[rtg.dtype];
+        rtg.eligible=S.students.filter(function(s){
+          if(rdef.maleOnly&&s.gender!=='男')return false;
+          if(rtg.dtype==='校巡'&&isNightSlot(rtg.slot)&&s.gender==='女')return false;
+          if(S.thisWeekIds.has(s.id))return false;
+          if(lastWeek.has(s.id))return false;
+          if(!isStudentFree(s.dept,rtg.day,rtg.slot))return false;
+          return true;
+        }).length;
+      }
+      var remaining=targets.slice(t);
+      remaining.sort(function(a,b){return a.eligible-b.eligible;});
+      for(var ri=0;ri<remaining.length;ri++){targets[t+ri]=remaining[ri];}
+    }
     var tg=targets[t],def=DUTY_DEFS[tg.dtype];
     var cands=S.students.filter(function(s){
       if(def.maleOnly&&s.gender!=='男')return false;
@@ -431,7 +619,7 @@ function autoSchedule(){
       if(!isStudentFree(s.dept,tg.day,tg.slot))return false;
       return true;
     });
-    cands.sort(function(a,b){return(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);});
+    cands.sort(function(a,b){return(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0)||(Math.random()-0.5);});
     if(tg.dtype==='校巡'&&tg.idx>0&&cands.length>0){
       var assigned=S.assignments[tg.dtype][tg.key];
       var hasM=assigned.some(function(p){return p&&getStudentGender(p.id)==='男';});
@@ -445,8 +633,9 @@ function autoSchedule(){
     }
     if(cands.length>0){
       var c=cands[0];
-      S.assignments[tg.dtype][tg.key].push({id:c.id,name:c.name});
+      S.assignments[tg.dtype][tg.key][tg.idx]={id:c.id,name:c.name};
       S.thisWeekIds.add(c.id);
+      fillCount++;
     }
   }
 }
@@ -502,7 +691,7 @@ function renderConfig(){
     grid.appendChild(card);
 
     card.addEventListener('click',function(e){
-      if(e.target.closest('.dc-config')&&!e.target.closest('.dc-head')){}
+      if(e.target.closest('.dc-config')&&!e.target.closest('.dc-head')){return;}
       if(e.target.classList.contains('day-tog')){e.target.classList.toggle('on');updateConfigSummary();return;}
       if(e.target.closest('.cfg-pp'))return;
       card.classList.toggle('selected');
@@ -519,6 +708,18 @@ function renderConfig(){
 function updateWeekDates(){
   S.weekNum=parseInt($('weekNum').value)||1;
   $('weekDates').textContent=weekRange(S.weekNum);
+  var prevWeek=S.weekNum-1;
+  var st=$('lastWeekStatus');
+  if(st){
+    var prev=S.history[prevWeek];
+    if(prev&&prev.ids&&prev.ids.length>0){
+      st.textContent='已載入：'+prev.ids.length+' 人（第'+prevWeek+'週）';
+      st.className='lastweek-status loaded';
+    }else{
+      st.textContent='未載入';
+      st.className='lastweek-status';
+    }
+  }
   updateConfigSummary();
 }
 function updateConfigSummary(){
@@ -544,7 +745,7 @@ function updateConfigSummary(){
     {t:'需求',n:totalSlots,c:''},
     {t:'可用男',n:availM,c:''},
     {t:'可用女',n:availF,c:''},
-    {t:ok?'\u2713 人數充足':'\u26A0 人數不足',n:'',c:ok?'sb-ok':'sb-err'}
+    {t:ok?'\u2713 人數充足 (未含空堂限制)':'\u26A0 人數不足 (未含空堂限制)',n:'',c:ok?'sb-ok':'sb-err'}
   ];
   items.forEach(function(it){
     var item=h('div',{className:'sb-item'+(it.c?' '+it.c:'')});
@@ -591,13 +792,6 @@ function renderResults(){
     panels.appendChild(panel);
     first=false;
   });
-  tabBar.addEventListener('click',function(e){
-    var btn=e.target.closest('.tab-btn');if(!btn)return;
-    tabBar.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
-    panels.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
-    btn.classList.add('active');
-    $('panel-'+btn.getAttribute('data-duty')).classList.add('active');
-  });
 }
 function buildDutyTable(dtype){
   var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
@@ -629,7 +823,17 @@ function buildDutyTable(dtype){
       tbody.appendChild(tr);
     }
   });
-  table.appendChild(tbody);wrap.appendChild(table);return wrap;
+  table.appendChild(tbody);wrap.appendChild(table);
+  /* Mobile scroll hint — outer wrapper so hint is not clipped by overflow */
+  var outer=h('div',{className:'tbl-outer'});
+  outer.appendChild(wrap);
+  var hint=h('div',{className:'tbl-scroll-hint'});
+  outer.appendChild(hint);
+  wrap.addEventListener('scroll',function(){
+    var maxScroll=wrap.scrollWidth-wrap.clientWidth;
+    hint.classList.toggle('hidden',wrap.scrollLeft>=maxScroll-10);
+  });
+  return outer;
 }
 
 /* ===== UI: Picker ===== */
@@ -645,8 +849,8 @@ function getAllStudentsForPicker(dtype,day,slot,slotIds,current){
     var reasons=[];
     if(def.maleOnly&&s.gender!=='男')reasons.push('gender');
     if(dtype==='校巡'&&isNightSlot(slot)&&s.gender==='女')reasons.push('night');
-    if(S.thisWeekIds.has(s.id)&&!(tempRelease&&tempRelease.has(s.id)))reasons.push('used');
-    if(lastWeek.has(s.id))reasons.push('used');
+    if(S.thisWeekIds.has(s.id)&&!(tempRelease&&tempRelease.has(s.id)))reasons.push('thisWeek');
+    if(lastWeek.has(s.id))reasons.push('lastWeek');
     if(!isStudentFree(s.dept,day,slot))reasons.push('busy');
     return{id:s.id,name:s.name,dept:s.dept,gender:s.gender,reasons:reasons};
   });
@@ -673,6 +877,7 @@ function openPicker(dtype,day,slot,idx){
   refreshPickerList();
   $('pickerSearch').value='';
   $('pickerModal').classList.add('show');
+  document.body.style.overflow='hidden';
   setTimeout(function(){$('pickerSearch').focus();},150);
   $('pickerSearch').oninput=function(){refreshPickerList();};
   cb.onchange=function(){
@@ -690,15 +895,21 @@ function refreshPickerList(){
 }
 function renderPickerList(candidates,current,showAll){
   var list=$('pickerList');clearEl(list);
+  var clearRow=$('pickerClearRow');clearEl(clearRow);
   if(current){
+    clearRow.style.display='block';
     var clr=h('div',{className:'pk-clear'},'\u2715 清除此格（移除 '+current.id+' '+current.name+'）');
     clr.addEventListener('click',function(){assignPerson(null);closePicker();});
-    list.appendChild(clr);
-  }
+    clearRow.appendChild(clr);
+  }else{clearRow.style.display='none';}
   if(candidates.length===0){
     var empty=h('div',{className:'pk-empty'},showAll?'搜尋無結果':'目前沒有符合條件的可用人員');
     list.appendChild(empty);
     return;
+  }
+  if(!showAll){
+    var hint=h('div',{className:'pk-hint'},'以下均為上週未排勤、本週未指派、該時段空堂之人員（'+candidates.length+'人）');
+    list.appendChild(hint);
   }
   candidates.forEach(function(s){
     var forced=showAll&&s.reasons&&s.reasons.length>0;
@@ -710,7 +921,8 @@ function renderPickerList(candidates,current,showAll){
       s.reasons.forEach(function(r){
         var badge=h('span',{className:'pk-badge '+r});
         if(r==='busy')badge.textContent='有課';
-        else if(r==='used')badge.textContent='已排';
+        else if(r==='thisWeek')badge.textContent='本週';
+        else if(r==='lastWeek')badge.textContent='上週';
         else if(r==='gender')badge.textContent='性別';
         else if(r==='night')badge.textContent='夜間';
         nameSpan.appendChild(badge);
@@ -732,8 +944,10 @@ function assignPerson(student){
   if(old){
     var still=false;
     Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){
-      if(dt===ctx.dtype&&k===key)return;
-      if(S.assignments[dt][k].some(function(p){return p&&p.id===old.id;}))still=true;
+      S.assignments[dt][k].forEach(function(p,i){
+        if(dt===ctx.dtype&&k===key&&i===ctx.idx)return;
+        if(p&&p.id===old.id)still=true;
+      });
     });});
     if(!still)S.thisWeekIds.delete(old.id);
   }
@@ -749,7 +963,7 @@ function assignPerson(student){
   if(panel){clearEl(panel);panel.appendChild(buildDutyTable(ctx.dtype));}
   renderStatsBar();renderDashboard();
 }
-function closePicker(){$('pickerModal').classList.remove('show');pickerCtx=null;}
+function closePicker(){$('pickerModal').classList.remove('show');document.body.style.overflow='';pickerCtx=null;}
 
 /* ===== UI: Dashboard ===== */
 function renderDashboard(){
@@ -918,7 +1132,7 @@ function exportExcel(){
         else{
           /* dataRow%2: 0=name row, 1=signature row (same for horiz/vertical) */
           if((R-3)%2===1){ws[addr].s=sSig;}
-          else if(C%2===1){ws[addr].s=sId;ws[addr].z='000';}
+          else if((C-1)%2===0){ws[addr].s=sId;ws[addr].z='000';}
           else{ws[addr].s=sName;}
           /* TODO: holiday handling — merge cells + grey fill + "放假" text for non-duty days */
         }
@@ -942,6 +1156,7 @@ function exportExcel(){
 
 /* ===== PERSISTENCE ===== */
 function saveWeek(){
+  if(S.savedWeeks.has(S.weekNum)){showToast('第 '+S.weekNum+' 週已儲存過，請勿重複儲存');return;}
   var weekHrs={};
   Object.keys(S.assignments).forEach(function(dtype){
     Object.keys(S.assignments[dtype]).forEach(function(key){
@@ -951,7 +1166,8 @@ function saveWeek(){
   });
   Object.keys(weekHrs).forEach(function(id){S.cumHours[id]=(S.cumHours[id]||0)+weekHrs[id];});
   S.history[S.weekNum]={ids:Array.from(S.thisWeekIds)};
-  localStorage.setItem('dutySchedulerHistory',JSON.stringify({history:S.history,cumHours:S.cumHours}));
+  S.savedWeeks.add(S.weekNum);
+  try{localStorage.setItem('dutySchedulerHistory',JSON.stringify({history:S.history,cumHours:S.cumHours,assignments:S.assignments}));}catch(e){showToast('儲存失敗：儲存空間不足');return;}
   showToast('第 '+S.weekNum+' 週紀錄已儲存（'+S.thisWeekIds.size+' 人）');
 }
 
@@ -976,29 +1192,80 @@ function handleFile(file){
   reader.readAsArrayBuffer(file);
 }
 function init(){
+  $('resultTabs').addEventListener('click',function(e){
+    var btn=e.target.closest('.tab-btn');if(!btn)return;
+    var tabBar=$('resultTabs'),panels=$('resultPanels');
+    tabBar.querySelectorAll('.tab-btn').forEach(function(b){b.classList.remove('active');});
+    panels.querySelectorAll('.tab-panel').forEach(function(p){p.classList.remove('active');});
+    btn.classList.add('active');
+    $('panel-'+btn.getAttribute('data-duty')).classList.add('active');
+  });
   renderConfig();
   var dz=$('dropZone'),fi=$('fileInput');
   dz.addEventListener('click',function(){fi.click();});
   dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('dragover');});
   dz.addEventListener('dragleave',function(){dz.classList.remove('dragover');});
   dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('dragover');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
-  fi.addEventListener('change',function(){if(fi.files[0])handleFile(fi.files[0]);});
+  fi.addEventListener('change',function(){if(fi.files[0])handleFile(fi.files[0]);fi.value='';});
   $('btnSchedule').addEventListener('click',function(){
     var btn=$('btnSchedule');
     btn.disabled=true;
     var spinner=h('span',{className:'spinner'});
     btn.insertBefore(spinner,btn.firstChild);
-    btn.childNodes[btn.childNodes.length-1].textContent||btn.appendChild(document.createTextNode(''));
     setTimeout(function(){
-      autoSchedule();renderResults();renderDashboard();
+      generateEmptySchedule();renderResults();renderDashboard();
       showStep(['stepImport','stepConfig','stepResults','stepDashboard']);
       btn.removeChild(spinner);
       btn.disabled=false;
       $('stepResults').scrollIntoView({behavior:'smooth'});
+      showToast('已產生空白勤務表，可手動指派後再填滿');
     },300);
   });
-  $('btnReimport').addEventListener('click',function(){showStep(['stepImport']);});
-  $('btnReconfig').addEventListener('click',function(){showStep(['stepImport','stepConfig']);});
+  $('btnFillEmpty').addEventListener('click',function(){
+    if(!S.assignments||Object.keys(S.assignments).length===0){showToast('請先產生勤務表');return;}
+    var btn=$('btnFillEmpty');
+    btn.disabled=true;
+    var spinner=h('span',{className:'spinner'});
+    btn.insertBefore(spinner,btn.firstChild);
+    setTimeout(function(){
+      fillRemainingSlots();renderResults();renderDashboard();
+      btn.removeChild(spinner);
+      btn.disabled=false;
+      showToast('已隨機填滿所有空格');
+    },300);
+  });
+  $('btnReimport').addEventListener('click',function(){if(Object.keys(S.assignments).length>0){if(!confirm('確定要重新匯入？未儲存的排班資料將遺失。'))return;}showStep(['stepImport']);});
+  $('btnReconfig').addEventListener('click',function(){if(Object.keys(S.assignments).length>0){if(!confirm('確定要重新設定？未儲存的排班資料將遺失。'))return;}showStep(['stepImport','stepConfig']);});
+  $('btnUploadLastWeek').addEventListener('click',function(){$('lastWeekFile').click();});
+  $('lastWeekFile').addEventListener('change',function(){
+    var file=$('lastWeekFile').files[0];
+    if(!file)return;
+    var reader=new FileReader();
+    reader.onload=function(e){
+      try{
+        var wb=XLSX.read(e.target.result);
+        var ids=parseLastWeekExcel(wb);
+        if(ids.length===0)throw new Error('未找到任何學員');
+        var prevWeek=S.weekNum-1;
+        S.history[prevWeek]={ids:ids};
+        var st=$('lastWeekStatus');
+        st.textContent='已載入：'+ids.length+' 人（第'+prevWeek+'週）';
+        st.className='lastweek-status loaded';
+        updateConfigSummary();
+        showToast('上週排班表已載入（'+ids.length+' 人）');
+      }catch(err){
+        $('lastWeekStatus').textContent='載入失敗：'+err.message;
+        showToast('載入失敗：'+err.message);
+      }
+      $('lastWeekFile').value='';
+    };
+    reader.readAsArrayBuffer(file);
+  });
+  window.addEventListener('beforeunload',function(e){
+    if(S.assignments&&Object.keys(S.assignments).length>0&&!S.savedWeeks.has(S.weekNum)){
+      e.preventDefault();e.returnValue='您有未儲存的排班資料，確定要離開嗎？';
+    }
+  });
   $('btnExport').addEventListener('click',exportExcel);
   $('btnSave').addEventListener('click',saveWeek);
   $('pickerClose').addEventListener('click',closePicker);
