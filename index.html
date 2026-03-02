@@ -790,6 +790,32 @@ function renderDashboard(){
 }
 
 /* ===== EXPORT (styled xlsx-js-style, matches original format) ===== */
+function downloadBlob(blob,fname){
+  /* Mobile: use Web Share API (opens native share sheet on iOS/Android) */
+  if(typeof navigator.share==='function'&&typeof File!=='undefined'){
+    try{
+      var file=new File([blob],fname,{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+      if(navigator.canShare&&navigator.canShare({files:[file]})){
+        navigator.share({files:[file],title:fname}).then(function(){
+          showToast('Excel 已分享');
+        }).catch(function(err){
+          if(err.name!=='AbortError')blobAnchorDownload(blob,fname);
+        });
+        return;
+      }
+    }catch(e){/* File constructor not supported, fall through */}
+  }
+  blobAnchorDownload(blob,fname);
+}
+function blobAnchorDownload(blob,fname){
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download=fname;a.style.display='none';
+  document.body.appendChild(a);
+  a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},500);
+  showToast('Excel 已下載');
+}
 function exportExcel(){
   var wb=XLSX.utils.book_new();
   var FN='DFKai-SB';
@@ -936,8 +962,12 @@ function exportExcel(){
 
     XLSX.utils.book_append_sheet(wb,ws,def.label.slice(0,31));
   });
-  XLSX.writeFile(wb,'\u52E4\u52D9\u6392\u73ED_\u7B2C'+S.weekNum+'\u9031.xlsx');
-  showToast('Excel \u5DF2\u4E0B\u8F09');
+  var fname='\u52E4\u52D9\u6392\u73ED_\u7B2C'+S.weekNum+'\u9031.xlsx';
+  try{
+    var wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
+    var blob=new Blob([wbout],{type:'application/octet-stream'});
+    downloadBlob(blob,fname);
+  }catch(e){showToast('\u532F\u51FA\u5931\u6557\uFF1A'+e.message);}
 }
 
 /* ===== PERSISTENCE ===== */
