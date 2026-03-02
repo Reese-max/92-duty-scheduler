@@ -439,28 +439,26 @@ function autoSchedule(){
       if(!isStudentFree(s.dept,tg.day,tg.slot))return false;
       return true;
     });
-    /* Sort by dept deficit (under-represented depts first), then cumulative hours */
-    var nA=S.thisWeekIds.size+1;
-    cands.sort(function(a,b){
-      var dA=a.dept||'\u672A\u77E5',dB=b.dept||'\u672A\u77E5';
-      var defA=totalPool?(deptSizes[dA]||1)/totalPool*nA-(deptAssigned[dA]||0):0;
-      var defB=totalPool?(deptSizes[dB]||1)/totalPool*nA-(deptAssigned[dB]||0):0;
-      if(Math.abs(defA-defB)>0.01)return defB-defA;
-      return(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);
-    });
-    if(tg.dtype==='校巡'&&tg.idx>0&&cands.length>0){
-      var assigned=S.assignments[tg.dtype][tg.key];
-      var hasM=assigned.some(function(p){return p&&getStudentGender(p.id)==='男';});
-      var hasF=assigned.some(function(p){return p&&getStudentGender(p.id)==='女';});
-      if(hasM||hasF){
-        var prefer=hasM?'女':'男';
-        var preferred=cands.filter(function(s){return s.gender===prefer;});
-        var rest=cands.filter(function(s){return s.gender!==prefer;});
-        cands=preferred.concat(rest);
-      }
-    }
+    /* Weighted random: dept deficit as weight (proportional balance + randomness) */
     if(cands.length>0){
-      var c=cands[0];
+      var nA=S.thisWeekIds.size+1,totalW=0;
+      cands.forEach(function(s){
+        var dept=s.dept||'\u672A\u77E5';
+        var deficit=totalPool?(deptSizes[dept]||1)/totalPool*nA-(deptAssigned[dept]||0):1;
+        s._w=Math.max(deficit,0.1);totalW+=s._w;
+      });
+      /* 校巡: boost preferred gender for mixed pairing */
+      if(tg.dtype==='\u6821\u5DE1'&&tg.idx>0){
+        var assigned=S.assignments[tg.dtype][tg.key];
+        var hasM=assigned.some(function(p){return p&&getStudentGender(p.id)==='\u7537';});
+        var hasF=assigned.some(function(p){return p&&getStudentGender(p.id)==='\u5973';});
+        if(hasM||hasF){
+          var prefer=hasM?'\u5973':'\u7537';
+          totalW=0;cands.forEach(function(s){if(s.gender===prefer)s._w*=3;totalW+=s._w;});
+        }
+      }
+      var rand=Math.random()*totalW,cum=0,c=cands[0];
+      for(var i=0;i<cands.length;i++){cum+=cands[i]._w;if(rand<cum){c=cands[i];break;}}
       S.assignments[tg.dtype][tg.key].push({id:c.id,name:c.name});
       S.thisWeekIds.add(c.id);
       var dept=c.dept||'\u672A\u77E5';deptAssigned[dept]=(deptAssigned[dept]||0)+1;
