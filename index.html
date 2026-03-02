@@ -1122,9 +1122,9 @@ function exportExcel(){
     /* Per-sheet data cell styles (ID/Name/Sig) using fs.data */
     var sId={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrId,fill:{patternType:'solid',fgColor:{rgb:'D8D8D8'}}};
     var sName={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-    var sSig={font:{sz:10,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
+    var sSig={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
     var sNameEmpty={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName,fill:grayFill};
-    var sSigEmpty={font:{sz:10,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
+    var sSigEmpty={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
 
     /* Row 0: Title */
     var titleLabel=TITLE_MAP[dtype]||def.label;
