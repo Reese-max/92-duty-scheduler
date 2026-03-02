@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="UTF-8"><title>勤排系統測試</title></head>
+<body>
+<h1>勤排系統 — 單元測試</h1>
+<pre id="output"></pre>
+<script>
+var passed=0, failed=0;
+function assert(desc, condition) {
+  if(condition) { passed++; log('✓ ' + desc); }
+  else { failed++; log('✗ ' + desc); }
+}
+function assertEq(desc, actual, expected) {
+  if(actual === expected) { passed++; log('✓ ' + desc); }
+  else { failed++; log('✗ ' + desc + ' (got: ' + actual + ', expected: ' + expected + ')'); }
+}
+function log(msg) { document.getElementById('output').textContent += msg + '\n'; }
+
+// === Copy pure functions from index.html ===
+var SEMESTER_START=new Date(2026,2,2);
+function timeToMin(t){return parseInt(t.slice(0,2))*60+parseInt(t.slice(2));}
+function slotHours(slot){var p=slot.split('-'),s=timeToMin(p[0]),e=timeToMin(p[1]);if(e<=s)e+=1440;return(e-s)/60;}
+function fmtSlot(slot){var p=slot.split('-');return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
+function dayOffset(day){var m={'一':0,'二':1,'三':2,'四':3,'五':4,'六':5,'日':-1};return m[day]!=null?m[day]:0;}
+function weekDate(wn,day){var d=new Date(SEMESTER_START);d.setDate(d.getDate()+(wn-1)*7+dayOffset(day));return(d.getMonth()+1)+'月'+d.getDate()+'日';}
+function weekRange(wn){return weekDate(wn,'一')+' — '+weekDate(wn,'五');}
+
+// === timeToMin tests ===
+log('\n=== timeToMin ===');
+assertEq('0000 = 0', timeToMin('0000'), 0);
+assertEq('0100 = 60', timeToMin('0100'), 60);
+assertEq('0800 = 480', timeToMin('0800'), 480);
+assertEq('1200 = 720', timeToMin('1200'), 720);
+assertEq('2359 = 1439', timeToMin('2359'), 1439);
+
+// === slotHours tests ===
+log('\n=== slotHours ===');
+assertEq('0600-0800 = 2h', slotHours('0600-0800'), 2);
+assertEq('0800-1000 = 2h', slotHours('0800-1000'), 2);
+assertEq('1200-1350 = 110min', slotHours('1200-1350'), 110/60);
+assertEq('2300-0100 overnight = 2h', slotHours('2300-0100'), 2);
+assertEq('2200-0000 = 2h', slotHours('2200-0000'), 2);
+
+// === fmtSlot tests ===
+log('\n=== fmtSlot ===');
+assertEq('format 0600-0800', fmtSlot('0600-0800'), '06:00-08:00');
+assertEq('format 2300-0100', fmtSlot('2300-0100'), '23:00-01:00');
+
+// === dayOffset tests ===
+log('\n=== dayOffset ===');
+assertEq('一=0', dayOffset('一'), 0);
+assertEq('五=4', dayOffset('五'), 4);
+assertEq('日=-1', dayOffset('日'), -1);
+
+// === weekDate tests ===
+log('\n=== weekDate ===');
+assertEq('week1 一 = 3月2日', weekDate(1,'一'), '3月2日');
+assertEq('week1 五 = 3月6日', weekDate(1,'五'), '3月6日');
+assertEq('week2 一 = 3月9日', weekDate(2,'一'), '3月9日');
+
+// === weekRange tests ===
+log('\n=== weekRange ===');
+assertEq('week1 range', weekRange(1), '3月2日 — 3月6日');
+
+// === Summary ===
+log('\n=== Results ===');
+log('Passed: ' + passed + ', Failed: ' + failed);
+if(failed === 0) log('All tests passed!');
+</script>
+</body>
+</html>
