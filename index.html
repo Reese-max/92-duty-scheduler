@@ -335,7 +335,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
   <section id="stepImport" class="step active">
     <h2><span class="num">1</span> 匯入排班資料</h2>
     <div class="drop-zone" id="dropZone">
-      <p>拖放 <strong>2-26+.xlsx</strong> 到此處</p>
+      <p>拖放 <strong>排班資料</strong> 到此處</p>
       <p class="hint">或點擊選擇檔案</p>
       <input type="file" id="fileInput" accept=".xlsx,.xls">
     </div>
@@ -543,6 +543,18 @@ function parseLastWeekExcel(wb){
   return Array.from(found);
 }
 function isNightSlot(slot){return timeToMin(slot.split('-')[0])>=1200;}
+function slotsOverlap(slots,day,slot){
+  if(!slots||slots.length===0)return false;
+  var p=slot.split('-'),s1=timeToMin(p[0]),e1=timeToMin(p[1]);
+  if(e1<=s1)e1+=1440;
+  for(var i=0;i<slots.length;i++){
+    if(slots[i].day!==day)continue;
+    var q=slots[i].slot.split('-'),s2=timeToMin(q[0]),e2=timeToMin(q[1]);
+    if(e2<=s2)e2+=1440;
+    if(s1<e2&&s2<e1)return true;
+  }
+  return false;
+}
 /* Use studentMap for O(1) lookup instead of linear find() (Defect #22) */
 function getStudentGender(id){var s=S.studentMap[id];return s?s.gender:null;}
 function getAvailable(dutyType,day,slot,tempRelease){
@@ -571,11 +583,19 @@ function generateEmptySchedule(){
   });
 }
 function fillRemainingSlots(){
-  /* 收集已手動指派的人到 thisWeekIds */
+  /* 收集已手動指派的人到 thisWeekIds，並建立 assignedSlots Map */
   S.thisWeekIds=new Set();
+  var assignedSlots=new Map();
   Object.keys(S.assignments).forEach(function(dtype){
     Object.keys(S.assignments[dtype]).forEach(function(key){
-      (S.assignments[dtype][key]||[]).forEach(function(p){if(p)S.thisWeekIds.add(p.id);});
+      var parts=key.split('|'),day=parts[0],slot=parts[1];
+      (S.assignments[dtype][key]||[]).forEach(function(p){
+        if(p){
+          S.thisWeekIds.add(p.id);
+          if(!assignedSlots.has(p.id))assignedSlots.set(p.id,[]);
+          assignedSlots.get(p.id).push({day:day,slot:slot});
+        }
+      });
     });
   });
   var lastWeek=getLastWeekIds(),targets=[];
@@ -646,6 +666,8 @@ function fillRemainingSlots(){
       var c=cands[0];
       S.assignments[tg.dtype][tg.key][tg.idx]={id:c.id,name:c.name};
       S.thisWeekIds.add(c.id);
+      if(!assignedSlots.has(c.id))assignedSlots.set(c.id,[]);
+      assignedSlots.get(c.id).push({day:tg.day,slot:tg.slot});
       fillCount++;
     }
   }
