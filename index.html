@@ -960,8 +960,9 @@ function exportExcel(){
     ws['!cols']=cw;
     ws['!rows']=rh;
 
-    XLSX.utils.book_append_sheet(wb,ws,def.label.slice(0,31));
+    XLSX.utils.book_append_sheet(wb,ws,def.label.replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31));
   });
+  if(!wb.SheetNames.length){showToast('\u8ACB\u5148\u5B8C\u6210\u6392\u52E4\u518D\u532F\u51FA');return;}
   var fname='\u52E4\u52D9\u6392\u73ED_\u7B2C'+S.weekNum+'\u9031.xlsx';
   try{
     var wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
