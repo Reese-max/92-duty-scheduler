@@ -608,8 +608,8 @@ function fillRemainingSlots(){
   Object.keys(S.active).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
     cfg.days.forEach(function(day){
-      if(S.holidays[dtype]&&S.holidays[dtype].has(day))return;
       def.slots.forEach(function(slot){
+        if(S.holidays[dtype]&&S.holidays[dtype].has(day+'|'+slot))return;
         var key=day+'|'+slot;
         if(!S.assignments[dtype][key])S.assignments[dtype][key]=[];
         var eligible=S.students.filter(function(s){
@@ -857,8 +857,8 @@ function buildDutyTable(dtype){
       if(p===0){var tc=h('td',{className:'time-cell'},fmtSlot(slot));if(cfg.pp>1)tc.setAttribute('rowspan',String(cfg.pp));tr.appendChild(tc);}
       cfg.days.forEach(function(day){
         var td=h('td',{className:'person-cell'});
-        var dayHoliday=S.holidays[dtype]&&S.holidays[dtype].has(day);
-        if(dayHoliday){
+        var slotHoliday=S.holidays[dtype]&&S.holidays[dtype].has(day+'|'+slot);
+        if(slotHoliday){
           td.classList.add('holiday-cell');
           td.textContent='放假';
         }else{
@@ -927,12 +927,13 @@ function openPicker(dtype,day,slot,idx,tdEl){
   toggle.classList.toggle('auto',autoShowAll);
   byId('pickerToggleLabel').textContent=autoShowAll?'已自動開啟：無符合條件人員，顯示全部學員':'顯示全部學員（忽略限制）';
   pickerState={candidates:candidates,allStudents:allStudents,current:current,showAll:autoShowAll};
-  /* Holiday button */
+  /* Holiday button (per-slot) */
   var hRow=$('pickerHolidayRow');clearEl(hRow);
-  var isH=S.holidays[dtype]&&S.holidays[dtype].has(day);
+  var hkey=day+'|'+slot;
+  var isH=S.holidays[dtype]&&S.holidays[dtype].has(hkey);
   hRow.style.display='block';
-  var hBtn=h('div',{className:'pk-holiday'+(isH?' cancel':'')},isH?'\u21A9 取消 '+weekDate(S.weekNum,day)+'('+day+') 放假':'\uD83C\uDFD6 標記 '+weekDate(S.weekNum,day)+'('+day+') 整天放假');
-  hBtn.addEventListener('click',function(){toggleDayHoliday(dtype,day,!isH);closePicker();});
+  var hBtn=h('div',{className:'pk-holiday'+(isH?' cancel':'')},isH?'\u21A9 取消此時段放假':'\uD83C\uDFD6 標記此時段放假');
+  hBtn.addEventListener('click',function(){toggleSlotHoliday(dtype,day,slot,!isH);closePicker();});
   hRow.appendChild(hBtn);
   /* If holiday, hide student list */
   var isHolidayMode=isH;
@@ -1000,31 +1001,28 @@ function renderPickerList(candidates,current,showAll){
     list.appendChild(item);
   });
 }
-function toggleDayHoliday(dtype,day,setHoliday){
+function toggleSlotHoliday(dtype,day,slot,setHoliday){
   if(!S.holidays[dtype])S.holidays[dtype]=new Set();
+  var hkey=day+'|'+slot;
   if(setHoliday){
-    S.holidays[dtype].add(day);
-    var def=DUTY_DEFS[dtype];
-    def.slots.forEach(function(slot){
-      var key=day+'|'+slot;
-      if(S.assignments[dtype]&&S.assignments[dtype][key]){
-        S.assignments[dtype][key].forEach(function(p){
-          if(p){
-            var still=false;
-            Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){
-              if(dt===dtype&&k.split('|')[0]===day)return;
-              S.assignments[dt][k].forEach(function(pp){if(pp&&pp.id===p.id)still=true;});
-            });});
-            if(!still)S.thisWeekIds.delete(p.id);
-          }
-        });
-        for(var i=0;i<S.assignments[dtype][key].length;i++)S.assignments[dtype][key][i]=undefined;
-      }
-    });
-    showToast(day+' 已標記為放假');
+    S.holidays[dtype].add(hkey);
+    if(S.assignments[dtype]&&S.assignments[dtype][hkey]){
+      S.assignments[dtype][hkey].forEach(function(p){
+        if(p){
+          var still=false;
+          Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){
+            if(dt===dtype&&k===hkey)return;
+            S.assignments[dt][k].forEach(function(pp){if(pp&&pp.id===p.id)still=true;});
+          });});
+          if(!still)S.thisWeekIds.delete(p.id);
+        }
+      });
+      for(var i=0;i<S.assignments[dtype][hkey].length;i++)S.assignments[dtype][hkey][i]=undefined;
+    }
+    showToast(fmtSlot(slot)+' 已標記為放假');
   }else{
-    S.holidays[dtype].delete(day);
-    showToast(day+' 已取消放假');
+    S.holidays[dtype].delete(hkey);
+    showToast(fmtSlot(slot)+' 已取消放假');
   }
   var panel=byId('panel-'+dtype);
   if(panel){clearEl(panel);panel.appendChild(buildDutyTable(dtype));}
@@ -1189,10 +1187,10 @@ function exportExcel(){
     var sSigEmpty={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
     var sHoliday={font:{sz:fs.holiday||fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
 
-    /* Use manually marked holidays instead of auto-detecting empty days */
-    var emptyDays=new Set();
+    /* Build per-slot holiday map for export: holidaySlotMap[dayIdx][slotIdx]=true */
     var holidaySet=S.holidays[dtype]||new Set();
-    for(var di=0;di<days.length;di++){if(holidaySet.has(days[di]))emptyDays.add(di);}
+    var holidaySlotMap={};
+    for(var di=0;di<days.length;di++){for(var si=0;si<def.slots.length;si++){if(holidaySet.has(days[di]+'|'+def.slots[si])){if(!holidaySlotMap[di])holidaySlotMap[di]={};holidaySlotMap[di][si]=true;}}}
 
     /* Row 0: Title */
     var titleLabel=TITLE_MAP[dtype]||def.label;
@@ -1213,7 +1211,7 @@ function exportExcel(){
 
     /* Data rows: each slot = name rows + signature rows */
     var r=3;
-    def.slots.forEach(function(slot){
+    def.slots.forEach(function(slot,slotIdx){
       if(horiz){
         /* Horizontal: 2 rows per slot (name + sig), pp people side by side */
         var nameRow=new Array(totalCols).fill('');
@@ -1225,8 +1223,8 @@ function exportExcel(){
             var dc=1+i*colsPerDay+p*2;
             if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
           }
-          /* Merge signature cells per person (skip holiday days) */
-          if(!emptyDays.has(i)){for(var p=0;p<pp;p++){
+          /* Merge signature cells per person (skip holiday slots) */
+          if(!(holidaySlotMap[i]&&holidaySlotMap[i][slotIdx])){for(var p=0;p<pp;p++){
             var dc=1+i*colsPerDay+p*2;
             merges.push({s:{r:r+1,c:dc},e:{r:r+1,c:dc+1}});
           }}
@@ -1245,8 +1243,8 @@ function exportExcel(){
             var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
             var dc=1+i*2;
             if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
-            /* Merge signature row B:C for this day (skip holiday days) */
-            if(!emptyDays.has(i))merges.push({s:{r:r+p*2+1,c:dc},e:{r:r+p*2+1,c:dc+1}});
+            /* Merge signature row B:C for this day (skip holiday slots) */
+            if(!(holidaySlotMap[i]&&holidaySlotMap[i][slotIdx]))merges.push({s:{r:r+p*2+1,c:dc},e:{r:r+p*2+1,c:dc+1}});
           }
           aoa.push(nameRow);aoa.push(sigRow);
           rh.push({hpt:45});rh.push({hpt:60});
@@ -1257,9 +1255,25 @@ function exportExcel(){
       }
     });
 
-    /* Holiday: merge entire day column for empty days, write 放假 */
+    /* Holiday: merge per-slot groups for each day */
     var noteR=r;
-    emptyDays.forEach(function(di){var dc=1+di*(horiz?colsPerDay:2),endC=dc+(horiz?colsPerDay:2)-1;merges.push({s:{r:3,c:dc},e:{r:noteR-1,c:endC}});});
+    var holidayCells=new Set();
+    var holidayAnchors=[];
+    Object.keys(holidaySlotMap).forEach(function(diStr){
+      var di=parseInt(diStr);
+      var dc=1+di*(horiz?colsPerDay:2),endC=dc+(horiz?colsPerDay:2)-1;
+      var sis=Object.keys(holidaySlotMap[di]).map(Number).sort(function(a,b){return a-b;});
+      var gs=[],gs0=sis[0],gs1=sis[0];
+      for(var k=1;k<sis.length;k++){if(sis[k]===gs1+1)gs1=sis[k];else{gs.push([gs0,gs1]);gs0=gs1=sis[k];}}
+      gs.push([gs0,gs1]);
+      gs.forEach(function(g){
+        var sr=horiz?(3+g[0]*2):(3+g[0]*pp*2);
+        var er=horiz?(3+g[1]*2+1):(3+g[1]*pp*2+pp*2-1);
+        merges.push({s:{r:sr,c:dc},e:{r:er,c:endC}});
+        holidayAnchors.push({r:sr,c:dc});
+        for(var rr=sr;rr<=er;rr++)for(var cc=dc;cc<=endC;cc++)holidayCells.add(rr+','+cc);
+      });
+    });
 
     /* Note row */
     var nh=NOTE_HEIGHTS[dtype]||[36,36,36,36,36];
@@ -1273,11 +1287,8 @@ function exportExcel(){
     var ws=XLSX.utils.aoa_to_sheet(aoa);
     ws['!merges']=merges;
 
-    /* Set holiday text in merged cells */
-    emptyDays.forEach(function(di){var dc=1+di*(horiz?colsPerDay:2);var addr=XLSX.utils.encode_cell({r:3,c:dc});ws[addr]={t:'s',v:'\u653E\u5047'};});
-
-    /* Build holiday column lookup for style loop */
-    var hCols=[];emptyDays.forEach(function(di){var dc=1+di*(horiz?colsPerDay:2),endC=dc+(horiz?colsPerDay:2)-1;hCols.push([dc,endC]);});
+    /* Set holiday text in merged anchor cells */
+    holidayAnchors.forEach(function(a){var addr=XLSX.utils.encode_cell(a);ws[addr]={t:'s',v:'\u653E\u5047'};});
 
     /* Apply styles */
     var DATA_START_ROW = 3; // After title(0), date(1), weekday(2) rows
@@ -1292,8 +1303,8 @@ function exportExcel(){
         else if(R>=noteR){ws[addr].s=sNote;}
         else if(C===0){ws[addr].s=sTime;}
         else{
-          /* Check if cell is in a holiday (empty day) column */
-          var inH=false;for(var hi=0;hi<hCols.length;hi++){if(C>=hCols[hi][0]&&C<=hCols[hi][1]){inH=true;break;}}
+          /* Check if cell is in a holiday merge */
+          var inH=holidayCells.has(R+','+C);
           if(inH){ws[addr].s=sHoliday;}
           else{
           /* 判斷此格是否為空（無人指派）*/
