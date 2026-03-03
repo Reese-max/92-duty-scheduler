@@ -1083,8 +1083,8 @@ function blobAnchorDownload(blob,fname){
 function exportExcel(){
   var wb=XLSX.utils.book_new();
   var FN='DFKai-SB';
-  /* Border presets: thick=outer/day-separator (2pt), thin=id-name-separator */
-  var bM={style:'thick',color:{rgb:'000000'}},bT={style:'thin',color:{rgb:'000000'}};
+  /* Border presets: medium=outer/day-separator (2pt matching ODS), thin=id-name-separator */
+  var bM={style:'medium',color:{rgb:'000000'}},bT={style:'thin',color:{rgb:'000000'}};
   var bdrAll={top:bM,bottom:bM,left:bM,right:bM};
   var bdrId={top:bM,bottom:bM,left:bM,right:bT};
   var bdrName={top:bM,bottom:bM,left:bT,right:bM};
@@ -1093,7 +1093,7 @@ function exportExcel(){
   /* Per-sheet font sizes: {title, hdrLabel(col A), dateVal, dayVal(weekday), time, data(ID/Name), note} */
   var FONT_SIZES={'\u503C\u73ED':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:28},'\u591C\u5DE1':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u9031\u9593':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u6821\u5DE1':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16},'\u5BE2\u5DE1':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u8B66\u6280\u9928':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u76E3\u5EDA':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20},'\u7E3D\u968A\u503C\u661F':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20}};
   /* Column widths per duty type (matching reference ODS) */
-  var COL_WIDTHS={'\u503C\u73ED':{time:9,id:7,name:14},'\u591C\u5DE1':{time:11,id:7,name:14},'\u9031\u9593':{time:11,id:7,name:14},'\u6821\u5DE1':{time:13,id:7,name:11},'\u5BE2\u5DE1':{time:11,id:7,name:14},'\u8B66\u6280\u9928':{time:11,id:7,name:14},'\u76E3\u5EDA':{time:19,id:8,name:12},'\u7E3D\u968A\u503C\u661F':{time:9,id:7,name:21}};
+  var COL_WIDTHS={'\u503C\u73ED':{time:9,id:7,name:20},'\u591C\u5DE1':{time:11,id:7,name:14},'\u9031\u9593':{time:11,id:7,name:14},'\u6821\u5DE1':{time:13,id:7,name:11},'\u5BE2\u5DE1':{time:11,id:7,name:14},'\u8B66\u6280\u9928':{time:11,id:7,name:14},'\u76E3\u5EDA':{time:19,id:8,name:12},'\u7E3D\u968A\u503C\u661F':{time:9,id:7,name:24}};
   /* Header row heights per duty type (title/date/weekday, matching reference ODS) */
   var HDR_HEIGHTS={'\u591C\u5DE1':{date:28,day:49},'\u6821\u5DE1':{date:29,day:22},'\u7E3D\u968A\u503C\u661F':{date:29,day:48}};
   /* Note section row heights per duty type (5 rows, matching reference ODS) */
@@ -1140,7 +1140,7 @@ function exportExcel(){
 
     /* Row 0: Title */
     var titleLabel=TITLE_MAP[dtype]||def.label;
-    var title='\u4E2D\u592E\u8B66\u5BDF\u5927\u5B78 92\u671F1\u968A  114\u5B78\u5E74\u5EA6\u7B2C2\u5B78\u671F'+titleLabel+'  (\u7B2C'+S.weekNum+'\u9031)';
+    var title='\u4E2D\u592E\u8B66\u5BDF\u5927\u5B78 92\u671F1\u968A 114\u5B78\u5E74\u5EA6\u7B2C2\u5B78\u671F'+titleLabel+' (\u7B2C'+S.weekNum+'\u9031)';
     var titleRow=new Array(totalCols).fill('');titleRow[0]=title;
     aoa.push(titleRow);merges.push({s:{r:0,c:0},e:{r:0,c:totalCols-1}});
     rh.push({hpt:33});
