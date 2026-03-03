@@ -1096,6 +1096,8 @@ function exportExcel(){
   var COL_WIDTHS={'\u503C\u73ED':{time:9,id:7,name:14},'\u591C\u5DE1':{time:11,id:7,name:14},'\u9031\u9593':{time:11,id:7,name:14},'\u6821\u5DE1':{time:13,id:7,name:11},'\u5BE2\u5DE1':{time:11,id:7,name:14},'\u8B66\u6280\u9928':{time:11,id:7,name:14},'\u76E3\u5EDA':{time:19,id:8,name:12},'\u7E3D\u968A\u503C\u661F':{time:9,id:7,name:21}};
   /* Header row heights per duty type (title/date/weekday, matching reference ODS) */
   var HDR_HEIGHTS={'\u591C\u5DE1':{date:28,day:49},'\u6821\u5DE1':{date:29,day:22},'\u7E3D\u968A\u503C\u661F':{date:29,day:48}};
+  /* Note section row heights per duty type (5 rows, matching reference ODS) */
+  var NOTE_HEIGHTS={'\u503C\u73ED':[30,49.5,39.75,30,51],'\u591C\u5DE1':[39.75,39.75,39.75,30,69.75],'\u9031\u9593':[39.75,39.75,39.75,30,39.75],'\u6821\u5DE1':[37,37,37,37,37],'\u5BE2\u5DE1':[30,49.5,39.75,30,39.75],'\u8B66\u6280\u9928':[30,49.5,39.75,30,39.75],'\u76E3\u5EDA':[39.75,39.75,39.75,30,39.75],'\u7E3D\u968A\u503C\u661F':[42,42,42,42,42]};
   /* Time slot font override: \u5BE2\u5DE1/\u8B66\u6280\u9928 use \u6A19\u6977\u9AD4-\u7E41 */
   var TIME_FONT={'\u5BE2\u5DE1':'\u6A19\u6977\u9AD4-\u7E41','\u8B66\u6280\u9928':'\u6A19\u6977\u9AD4-\u7E41'};
   /* Slot format: raw=no colons, fullwidth=\uFF1A+newline, halfwidth=default */
@@ -1204,11 +1206,12 @@ function exportExcel(){
     emptyDays.forEach(function(di){var dc=1+di*(horiz?colsPerDay:2),endC=dc+(horiz?colsPerDay:2)-1;merges.push({s:{r:3,c:dc},e:{r:noteR-1,c:endC}});});
 
     /* Note row */
+    var nh=NOTE_HEIGHTS[dtype]||[36,36,36,36,36];
     var noteRow=new Array(totalCols).fill('');noteRow[0]=noteText;
     aoa.push(noteRow);merges.push({s:{r:noteR,c:0},e:{r:noteR+4,c:totalCols-1}});
+    rh.push({hpt:nh[0]});
     /* Add 4 extra empty rows for note area */
-    for(var n=0;n<4;n++){aoa.push(new Array(totalCols).fill(''));rh.push({hpt:36});}
-    rh.push({hpt:36});
+    for(var n=1;n<5;n++){aoa.push(new Array(totalCols).fill(''));rh.push({hpt:nh[n]});}
 
     /* Build worksheet */
     var ws=XLSX.utils.aoa_to_sheet(aoa);
