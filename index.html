@@ -127,6 +127,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .person-cell:hover{background:#dbeafe;box-shadow:inset 0 0 0 2px #3b82f6}
 .person-cell.filled{background:#fff}
 .person-cell.empty-slot{color:#999;font-size:1.1rem;border:1px dashed #bbb;background:#fafafa;animation:emptyPulse 2.5s ease-in-out infinite}
+.person-cell.holiday-cell{background:#d8d8d8;color:#666;font-weight:500;font-size:.85rem;border:1px solid #bbb}
 .pid{font-weight:700;font-size:.9rem;color:#111}
 .pname{font-size:.82rem;color:#555;margin-top:1px}
 .dtbl .row-group-first td{border-top:2.5px solid #333}
@@ -178,6 +179,10 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .pk-hint{padding:8px 14px;color:var(--text-m);font-size:.78rem;text-align:center;border-bottom:1px solid var(--border);margin-bottom:2px}
 .pk-clear{padding:12px 14px;color:#fff;background:rgba(231,76,60,.2);cursor:pointer;border-radius:8px;font-size:.92rem;font-weight:500;text-align:center;border:1px solid rgba(231,76,60,.35);margin:0 12px 0;transition:all .15s}
 .pk-clear:hover{background:rgba(231,76,60,.35);border-color:rgba(231,76,60,.5)}
+.pk-holiday{padding:12px 14px;color:#fff;background:rgba(127,140,141,.2);cursor:pointer;border-radius:8px;font-size:.92rem;font-weight:500;text-align:center;border:1px solid rgba(127,140,141,.35);margin:0 12px;transition:all .15s}
+.pk-holiday:hover{background:rgba(127,140,141,.35);border-color:rgba(127,140,141,.5)}
+.pk-holiday.cancel{background:rgba(52,152,219,.2);border-color:rgba(52,152,219,.35)}
+.pk-holiday.cancel:hover{background:rgba(52,152,219,.35);border-color:rgba(52,152,219,.5)}
 .pk-empty{padding:32px 20px;text-align:center;color:var(--text-d);font-size:.9rem}
 .pk-empty::before{content:'📭';display:block;font-size:2rem;margin-bottom:8px}
 .pk-toggle{display:flex;align-items:center;gap:8px;padding:6px 12px;font-size:.82rem;color:var(--text-m);cursor:pointer;user-select:none}
@@ -389,6 +394,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
     <div class="modal-search"><input type="text" id="pickerSearch" placeholder="搜尋學號或姓名..."></div>
     <label class="pk-toggle" id="pickerToggle"><input type="checkbox" id="pickerShowAll"><span id="pickerToggleLabel">顯示全部學員（忽略限制）</span></label>
     <div id="pickerClearRow" style="display:none"></div>
+    <div id="pickerHolidayRow" style="display:none"></div>
     <div class="picker-list" id="pickerList"></div>
   </div>
 </div>
@@ -435,7 +441,7 @@ var DUTY_DEFS={
 };
 
 /* ===== STATE ===== */
-var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},workbook:null,savedWeeks:new Set()};
+var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},holidays:{},workbook:null,savedWeeks:new Set()};
 
 /* ===== UTILS ===== */
 function byId(id){return document.getElementById(id);}
@@ -500,7 +506,7 @@ function loadWorkbook(wb){
     if(type==='時數')S.students=parseRoster(ws);
     else if(type==='空堂')S.freePeriods=parseFreePeriods(ws);
   }
-  try{var saved=JSON.parse(localStorage.getItem('dutySchedulerHistory')||'{}');S.history=saved.history||{};S.cumHours=saved.cumHours||{};if(saved.assignments){S.assignments=saved.assignments;S.thisWeekIds=new Set();Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){(S.assignments[dt][k]||[]).forEach(function(p){if(p)S.thisWeekIds.add(p.id);});});});}}catch(e){}
+  try{var saved=JSON.parse(localStorage.getItem('dutySchedulerHistory')||'{}');S.history=saved.history||{};S.cumHours=saved.cumHours||{};if(saved.assignments){S.assignments=saved.assignments;S.thisWeekIds=new Set();Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){(S.assignments[dt][k]||[]).forEach(function(p){if(p)S.thisWeekIds.add(p.id);});});});}if(saved.holidays){S.holidays={};Object.keys(saved.holidays).forEach(function(k){S.holidays[k]=new Set(saved.holidays[k]);});}}catch(e){}
 }
 
 /* ===== SCHEDULING ENGINE ===== */
@@ -602,6 +608,7 @@ function fillRemainingSlots(){
   Object.keys(S.active).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
     cfg.days.forEach(function(day){
+      if(S.holidays[dtype]&&S.holidays[dtype].has(day))return;
       def.slots.forEach(function(slot){
         var key=day+'|'+slot;
         if(!S.assignments[dtype][key])S.assignments[dtype][key]=[];
@@ -850,13 +857,19 @@ function buildDutyTable(dtype){
       if(p===0){var tc=h('td',{className:'time-cell'},fmtSlot(slot));if(cfg.pp>1)tc.setAttribute('rowspan',String(cfg.pp));tr.appendChild(tc);}
       cfg.days.forEach(function(day){
         var td=h('td',{className:'person-cell'});
-        var key=day+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
-        var person=arr[p];
-        if(person){
-          td.classList.add('filled');
-          td.appendChild(h('div',{className:'pid'},String(person.id)));
-          td.appendChild(h('div',{className:'pname'},person.name));
-        }else{td.classList.add('empty-slot');td.textContent='+';}
+        var dayHoliday=S.holidays[dtype]&&S.holidays[dtype].has(day);
+        if(dayHoliday){
+          td.classList.add('holiday-cell');
+          td.textContent='放假';
+        }else{
+          var key=day+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
+          var person=arr[p];
+          if(person){
+            td.classList.add('filled');
+            td.appendChild(h('div',{className:'pid'},String(person.id)));
+            td.appendChild(h('div',{className:'pname'},person.name));
+          }else{td.classList.add('empty-slot');td.textContent='+';}
+        }
         (function(dt,dy,sl,pi,tdEl){td.addEventListener('click',function(){openPicker(dt,dy,sl,pi,tdEl);})})(dtype,day,slot,p,td);
         tr.appendChild(td);
       });
@@ -914,11 +927,23 @@ function openPicker(dtype,day,slot,idx,tdEl){
   toggle.classList.toggle('auto',autoShowAll);
   byId('pickerToggleLabel').textContent=autoShowAll?'已自動開啟：無符合條件人員，顯示全部學員':'顯示全部學員（忽略限制）';
   pickerState={candidates:candidates,allStudents:allStudents,current:current,showAll:autoShowAll};
+  /* Holiday button */
+  var hRow=$('pickerHolidayRow');clearEl(hRow);
+  var isH=S.holidays[dtype]&&S.holidays[dtype].has(day);
+  hRow.style.display='block';
+  var hBtn=h('div',{className:'pk-holiday'+(isH?' cancel':'')},isH?'\u21A9 取消 '+weekDate(S.weekNum,day)+'('+day+') 放假':'\uD83C\uDFD6 標記 '+weekDate(S.weekNum,day)+'('+day+') 整天放假');
+  hBtn.addEventListener('click',function(){toggleDayHoliday(dtype,day,!isH);closePicker();});
+  hRow.appendChild(hBtn);
+  /* If holiday, hide student list */
+  var isHolidayMode=isH;
+  $('pickerSearch').parentNode.style.display=isHolidayMode?'none':'';
+  toggle.style.display=isHolidayMode?'none':'';
+  $('pickerList').style.display=isHolidayMode?'none':'';
   refreshPickerList();
   $('pickerSearch').value='';
   $('pickerModal').classList.add('show');
   document.body.style.overflow='hidden';
-  setTimeout(function(){$('pickerSearch').focus();},150);
+  if(!isHolidayMode)setTimeout(function(){$('pickerSearch').focus();},150);
   $('pickerSearch').oninput=function(){refreshPickerList();};
   cb.onchange=function(){
     pickerState.showAll=cb.checked;
@@ -974,6 +999,36 @@ function renderPickerList(candidates,current,showAll){
     item.addEventListener('click',function(){assignPerson(s);closePicker();});
     list.appendChild(item);
   });
+}
+function toggleDayHoliday(dtype,day,setHoliday){
+  if(!S.holidays[dtype])S.holidays[dtype]=new Set();
+  if(setHoliday){
+    S.holidays[dtype].add(day);
+    var def=DUTY_DEFS[dtype];
+    def.slots.forEach(function(slot){
+      var key=day+'|'+slot;
+      if(S.assignments[dtype]&&S.assignments[dtype][key]){
+        S.assignments[dtype][key].forEach(function(p){
+          if(p){
+            var still=false;
+            Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){
+              if(dt===dtype&&k.split('|')[0]===day)return;
+              S.assignments[dt][k].forEach(function(pp){if(pp&&pp.id===p.id)still=true;});
+            });});
+            if(!still)S.thisWeekIds.delete(p.id);
+          }
+        });
+        for(var i=0;i<S.assignments[dtype][key].length;i++)S.assignments[dtype][key][i]=undefined;
+      }
+    });
+    showToast(day+' 已標記為放假');
+  }else{
+    S.holidays[dtype].delete(day);
+    showToast(day+' 已取消放假');
+  }
+  var panel=byId('panel-'+dtype);
+  if(panel){clearEl(panel);panel.appendChild(buildDutyTable(dtype));}
+  renderStatsBar();renderDashboard();
 }
 function assignPerson(student){
   if(!pickerCtx)return;
@@ -1134,9 +1189,10 @@ function exportExcel(){
     var sSigEmpty={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
     var sHoliday={font:{sz:fs.holiday||fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
 
-    /* Detect empty days (all slots empty → holiday) */
+    /* Use manually marked holidays instead of auto-detecting empty days */
     var emptyDays=new Set();
-    for(var di=0;di<days.length;di++){var dayEmpty=true;for(var si=0;si<def.slots.length&&dayEmpty;si++){var key=days[di]+'|'+def.slots[si],arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];for(var pi=0;pi<pp;pi++){if(arr[pi]){dayEmpty=false;break;}}}if(dayEmpty)emptyDays.add(di);}
+    var holidaySet=S.holidays[dtype]||new Set();
+    for(var di=0;di<days.length;di++){if(holidaySet.has(days[di]))emptyDays.add(di);}
 
     /* Row 0: Title */
     var titleLabel=TITLE_MAP[dtype]||def.label;
@@ -1287,7 +1343,8 @@ function saveWeek(){
   Object.keys(weekHrs).forEach(function(id){S.cumHours[id]=(S.cumHours[id]||0)+weekHrs[id];});
   S.history[S.weekNum]={ids:Array.from(S.thisWeekIds)};
   S.savedWeeks.add(S.weekNum);
-  try{localStorage.setItem('dutySchedulerHistory',JSON.stringify({history:S.history,cumHours:S.cumHours,assignments:S.assignments}));}catch(e){showToast('儲存失敗：儲存空間不足');return;}
+  var hSer={};Object.keys(S.holidays).forEach(function(k){if(S.holidays[k]&&S.holidays[k].size)hSer[k]=Array.from(S.holidays[k]);});
+  try{localStorage.setItem('dutySchedulerHistory',JSON.stringify({history:S.history,cumHours:S.cumHours,assignments:S.assignments,holidays:hSer}));}catch(e){showToast('儲存失敗：儲存空間不足');return;}
   showToast('第 '+S.weekNum+' 週紀錄已儲存（'+S.thisWeekIds.size+' 人）');
 }
 
