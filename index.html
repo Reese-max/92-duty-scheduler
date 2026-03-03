@@ -1094,6 +1094,8 @@ function exportExcel(){
   var FONT_SIZES={'\u503C\u73ED':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u591C\u5DE1':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u9031\u9593':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u6821\u5DE1':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16},'\u5BE2\u5DE1':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u8B66\u6280\u9928':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u76E3\u5EDA':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20},'\u7E3D\u968A\u503C\u661F':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20}};
   /* Column widths per duty type (matching reference ODS) */
   var COL_WIDTHS={'\u503C\u73ED':{time:9,id:7,name:14},'\u591C\u5DE1':{time:11,id:7,name:14},'\u9031\u9593':{time:11,id:7,name:14},'\u6821\u5DE1':{time:13,id:7,name:11},'\u5BE2\u5DE1':{time:11,id:7,name:14},'\u8B66\u6280\u9928':{time:11,id:7,name:14},'\u76E3\u5EDA':{time:19,id:8,name:12},'\u7E3D\u968A\u503C\u661F':{time:9,id:7,name:21}};
+  /* Header row heights per duty type (title/date/weekday, matching reference ODS) */
+  var HDR_HEIGHTS={'\u591C\u5DE1':{date:28,day:49},'\u6821\u5DE1':{date:29,day:22},'\u7E3D\u968A\u503C\u661F':{date:29,day:48}};
   /* Time slot font override: \u5BE2\u5DE1/\u8B66\u6280\u9928 use \u6A19\u6977\u9AD4-\u7E41 */
   var TIME_FONT={'\u5BE2\u5DE1':'\u6A19\u6977\u9AD4-\u7E41','\u8B66\u6280\u9928':'\u6A19\u6977\u9AD4-\u7E41'};
   /* Slot format: raw=no colons, fullwidth=\uFF1A+newline, halfwidth=default */
@@ -1115,6 +1117,7 @@ function exportExcel(){
     var fs=FONT_SIZES[dtype]||{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20};
     var timeFN=TIME_FONT[dtype]||FN;
     var slotFmt=SLOT_FMT[dtype]||'halfwidth';
+    var hh=HDR_HEIGHTS[dtype]||{date:28,day:34};
     var sTitle={font:{sz:fs.title,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
     var sHdrLabel={font:{sz:fs.hdrLabel,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
     var sDateVal={font:{sz:fs.dateVal,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
@@ -1138,12 +1141,12 @@ function exportExcel(){
     /* Row 1: Dates */
     var dateRow=new Array(totalCols).fill('');dateRow[0]='\u65E5\u671F';
     for(var i=0;i<days.length;i++){var dc=1+i*colsPerDay;dateRow[dc]=weekDate(S.weekNum,days[i]);merges.push({s:{r:1,c:dc},e:{r:1,c:dc+colsPerDay-1}});}
-    aoa.push(dateRow);rh.push({hpt:28});
+    aoa.push(dateRow);rh.push({hpt:hh.date});
 
     /* Row 2: Days */
     var dayRow=new Array(totalCols).fill('');dayRow[0]='\u661F\u671F';
     for(var i=0;i<days.length;i++){var dc=1+i*colsPerDay;dayRow[dc]=days[i];merges.push({s:{r:2,c:dc},e:{r:2,c:dc+colsPerDay-1}});}
-    aoa.push(dayRow);rh.push({hpt:34});
+    aoa.push(dayRow);rh.push({hpt:hh.day});
 
     /* Data rows: each slot = name rows + signature rows */
     var r=3;
