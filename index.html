@@ -1091,7 +1091,7 @@ function exportExcel(){
   /* Gray fill for empty (unfilled) cells */
   var grayFill={patternType:'solid',fgColor:{rgb:'D8D8D8'}};
   /* Per-sheet font sizes: {title, hdrLabel(col A), dateVal, dayVal(weekday), time, data(ID/Name), note} */
-  var FONT_SIZES={'\u503C\u73ED':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u591C\u5DE1':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u9031\u9593':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u6821\u5DE1':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16},'\u5BE2\u5DE1':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u8B66\u6280\u9928':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u76E3\u5EDA':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20},'\u7E3D\u968A\u503C\u661F':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20}};
+  var FONT_SIZES={'\u503C\u73ED':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:28},'\u591C\u5DE1':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u9031\u9593':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u6821\u5DE1':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16},'\u5BE2\u5DE1':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u8B66\u6280\u9928':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u76E3\u5EDA':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20},'\u7E3D\u968A\u503C\u661F':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20}};
   /* Column widths per duty type (matching reference ODS) */
   var COL_WIDTHS={'\u503C\u73ED':{time:9,id:7,name:14},'\u591C\u5DE1':{time:11,id:7,name:14},'\u9031\u9593':{time:11,id:7,name:14},'\u6821\u5DE1':{time:13,id:7,name:11},'\u5BE2\u5DE1':{time:11,id:7,name:14},'\u8B66\u6280\u9928':{time:11,id:7,name:14},'\u76E3\u5EDA':{time:19,id:8,name:12},'\u7E3D\u968A\u503C\u661F':{time:9,id:7,name:21}};
   /* Header row heights per duty type (title/date/weekday, matching reference ODS) */
@@ -1130,6 +1130,11 @@ function exportExcel(){
     var sSig={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
     var sNameEmpty={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName,fill:grayFill};
     var sSigEmpty={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
+    var sHoliday={font:{sz:fs.holiday||fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
+
+    /* Detect empty days (all slots empty → holiday) */
+    var emptyDays=new Set();
+    for(var di=0;di<days.length;di++){var dayEmpty=true;for(var si=0;si<def.slots.length&&dayEmpty;si++){var key=days[di]+'|'+def.slots[si],arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];for(var pi=0;pi<pp;pi++){if(arr[pi]){dayEmpty=false;break;}}}if(dayEmpty)emptyDays.add(di);}
 
     /* Row 0: Title */
     var titleLabel=TITLE_MAP[dtype]||def.label;
@@ -1162,11 +1167,11 @@ function exportExcel(){
             var dc=1+i*colsPerDay+p*2;
             if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
           }
-          /* Merge signature cells per person */
-          for(var p=0;p<pp;p++){
+          /* Merge signature cells per person (skip holiday days) */
+          if(!emptyDays.has(i)){for(var p=0;p<pp;p++){
             var dc=1+i*colsPerDay+p*2;
             merges.push({s:{r:r+1,c:dc},e:{r:r+1,c:dc+1}});
-          }
+          }}
         }
         aoa.push(nameRow);aoa.push(sigRow);
         merges.push({s:{r:r,c:0},e:{r:r+1,c:0}});
@@ -1182,8 +1187,8 @@ function exportExcel(){
             var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
             var dc=1+i*2;
             if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
-            /* Merge signature row B:C for this day */
-            merges.push({s:{r:r+p*2+1,c:dc},e:{r:r+p*2+1,c:dc+1}});
+            /* Merge signature row B:C for this day (skip holiday days) */
+            if(!emptyDays.has(i))merges.push({s:{r:r+p*2+1,c:dc},e:{r:r+p*2+1,c:dc+1}});
           }
           aoa.push(nameRow);aoa.push(sigRow);
           rh.push({hpt:45});rh.push({hpt:60});
@@ -1194,8 +1199,11 @@ function exportExcel(){
       }
     });
 
-    /* Note row */
+    /* Holiday: merge entire day column for empty days, write 放假 */
     var noteR=r;
+    emptyDays.forEach(function(di){var dc=1+di*(horiz?colsPerDay:2),endC=dc+(horiz?colsPerDay:2)-1;merges.push({s:{r:3,c:dc},e:{r:noteR-1,c:endC}});});
+
+    /* Note row */
     var noteRow=new Array(totalCols).fill('');noteRow[0]=noteText;
     aoa.push(noteRow);merges.push({s:{r:noteR,c:0},e:{r:noteR+4,c:totalCols-1}});
     /* Add 4 extra empty rows for note area */
@@ -1205,6 +1213,12 @@ function exportExcel(){
     /* Build worksheet */
     var ws=XLSX.utils.aoa_to_sheet(aoa);
     ws['!merges']=merges;
+
+    /* Set holiday text in merged cells */
+    emptyDays.forEach(function(di){var dc=1+di*(horiz?colsPerDay:2);var addr=XLSX.utils.encode_cell({r:3,c:dc});ws[addr]={t:'s',v:'\u653E\u5047'};});
+
+    /* Build holiday column lookup for style loop */
+    var hCols=[];emptyDays.forEach(function(di){var dc=1+di*(horiz?colsPerDay:2),endC=dc+(horiz?colsPerDay:2)-1;hCols.push([dc,endC]);});
 
     /* Apply styles */
     var DATA_START_ROW = 3; // After title(0), date(1), weekday(2) rows
@@ -1219,6 +1233,10 @@ function exportExcel(){
         else if(R>=noteR){ws[addr].s=sNote;}
         else if(C===0){ws[addr].s=sTime;}
         else{
+          /* Check if cell is in a holiday (empty day) column */
+          var inH=false;for(var hi=0;hi<hCols.length;hi++){if(C>=hCols[hi][0]&&C<=hCols[hi][1]){inH=true;break;}}
+          if(inH){ws[addr].s=sHoliday;}
+          else{
           /* 判斷此格是否為空（無人指派）*/
           var nameR=(R-3)%2===1?R-1:R;
           var idC=(C-1)%2===0?C:C-1;
@@ -1227,6 +1245,7 @@ function exportExcel(){
           if((R-3)%2===1){ws[addr].s=slotEmpty?sSigEmpty:sSig;}
           else if((C-1)%2===0){ws[addr].s=sId;}
           else{ws[addr].s=slotEmpty?sNameEmpty:sName;}
+          }
         }
       }
     }
