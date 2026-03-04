@@ -442,7 +442,7 @@ var DUTY_DEFS={
 };
 
 /* ===== STATE ===== */
-var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},holidays:{},workbook:null,savedWeeks:new Set()};
+var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},holidays:{},holidayBackup:{},workbook:null,savedWeeks:new Set()};
 
 /* ===== UTILS ===== */
 function byId(id){return document.getElementById(id);}
@@ -507,6 +507,8 @@ function loadWorkbook(wb){
     if(type==='時數')S.students=parseRoster(ws);
     else if(type==='空堂')S.freePeriods=parseFreePeriods(ws);
   }
+  /* Build studentMap for O(1) gender lookup */
+  S.students.forEach(function(s){S.studentMap[s.id]=s;});
   try{var saved=JSON.parse(localStorage.getItem('dutySchedulerHistory')||'{}');S.history=saved.history||{};S.cumHours=saved.cumHours||{};if(saved.assignments){S.assignments=saved.assignments;S.thisWeekIds=new Set();Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){(S.assignments[dt][k]||[]).forEach(function(p){if(p)S.thisWeekIds.add(p.id);});});});}if(saved.holidays){S.holidays={};Object.keys(saved.holidays).forEach(function(k){S.holidays[k]=new Set(saved.holidays[k]);});}}catch(e){}
 }
 
@@ -552,13 +554,20 @@ function parseLastWeekExcel(wb){
 function isNightSlot(slot){return timeToMin(slot.split('-')[0])>=1200;}
 function slotsOverlap(slots,day,slot){
   if(!slots||slots.length===0)return false;
+  var DAYS=['一','二','三','四','五','六','日'];
+  var di=DAYS.indexOf(day);if(di<0)return false;
   var p=slot.split('-'),s1=timeToMin(p[0]),e1=timeToMin(p[1]);
   if(e1<=s1)e1+=1440;
+  var a1=di*1440+s1,b1=di*1440+e1,W=10080;
   for(var i=0;i<slots.length;i++){
-    if(slots[i].day!==day)continue;
+    var si=DAYS.indexOf(slots[i].day);if(si<0)continue;
     var q=slots[i].slot.split('-'),s2=timeToMin(q[0]),e2=timeToMin(q[1]);
     if(e2<=s2)e2+=1440;
-    if(s1<e2&&s2<e1)return true;
+    var a2=si*1440+s2,b2=si*1440+e2;
+    /* Direct overlap or week-wraparound (日→一) overlap */
+    if(a1<b2&&a2<b1)return true;
+    if(a1<b2+W&&a2+W<b1)return true;
+    if(a1+W<b2&&a2<b1+W)return true;
   }
   return false;
 }
@@ -593,7 +602,7 @@ function getAvailable(dutyType,day,slot,tempRelease){
   });
 }
 function generateEmptySchedule(){
-  S.assignments={};S.thisWeekIds=new Set();S.holidays={};
+  S.assignments={};S.thisWeekIds=new Set();S.holidays={};S.holidayBackup={};
   Object.keys(S.active).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
     S.assignments[dtype]={};
@@ -1028,10 +1037,13 @@ function renderPickerList(candidates,current,showAll){
 }
 function toggleSlotHoliday(dtype,day,slot,setHoliday){
   if(!S.holidays[dtype])S.holidays[dtype]=new Set();
-  var hkey=day+'|'+slot;
+  var hkey=day+'|'+slot,bkKey=dtype+'|'+hkey;
   if(setHoliday){
     S.holidays[dtype].add(hkey);
+    /* Backup assignments before clearing */
     if(S.assignments[dtype]&&S.assignments[dtype][hkey]){
+      var backup=S.assignments[dtype][hkey].map(function(p){return p?{id:p.id,name:p.name}:null;});
+      if(backup.some(function(p){return p;}))S.holidayBackup[bkKey]=backup;
       S.assignments[dtype][hkey].forEach(function(p){
         if(p){
           var still=false;
@@ -1047,7 +1059,17 @@ function toggleSlotHoliday(dtype,day,slot,setHoliday){
     showToast(fmtSlot(slot)+' 已標記為放假');
   }else{
     S.holidays[dtype].delete(hkey);
-    showToast(fmtSlot(slot)+' 已取消放假');
+    /* Restore backed-up assignments */
+    var backup=S.holidayBackup[bkKey];
+    if(backup&&S.assignments[dtype]&&S.assignments[dtype][hkey]){
+      for(var i=0;i<backup.length;i++){
+        if(backup[i]){S.assignments[dtype][hkey][i]=backup[i];S.thisWeekIds.add(backup[i].id);}
+      }
+      delete S.holidayBackup[bkKey];
+      showToast(fmtSlot(slot)+' 已取消放假（人員已還原）');
+    }else{
+      showToast(fmtSlot(slot)+' 已取消放假');
+    }
   }
   var panel=byId('panel-'+dtype);
   if(panel){clearEl(panel);panel.appendChild(buildDutyTable(dtype));}
@@ -1373,7 +1395,7 @@ function exportExcel(){
 
 /* ===== PERSISTENCE ===== */
 function saveWeek(){
-  if(S.savedWeeks.has(S.weekNum)){showToast('第 '+S.weekNum+' 週已儲存過，請勿重複儲存');return;}
+  if(S.history[S.weekNum]||S.savedWeeks.has(S.weekNum)){showToast('第 '+S.weekNum+' 週已儲存過，請勿重複儲存');return;}
   var weekHrs={};
   Object.keys(S.assignments).forEach(function(dtype){
     Object.keys(S.assignments[dtype]).forEach(function(key){

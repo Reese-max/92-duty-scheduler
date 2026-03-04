@@ -123,20 +123,26 @@ import{chromium}from'playwright';
     }
   }
 
-  // slotsOverlap unit tests
+  // slotsOverlap unit tests (including cross-day midnight overlap)
   const unit=await p.evaluate(()=>{return{
     'A:2200-0000 vs 2300-0100':slotsOverlap([{day:'一',slot:'2200-0000'}],'一','2300-0100'),
     'B:2000-2200 vs 2300-0100':slotsOverlap([{day:'一',slot:'2000-2200'}],'一','2300-0100'),
     'C:2200-2300 vs 2200-0000':slotsOverlap([{day:'一',slot:'2200-2300'}],'一','2200-0000'),
     'D:0800-1000 vs 0800-1000':slotsOverlap([{day:'一',slot:'0800-1000'}],'一','0800-1000'),
-    'E:diff day':slotsOverlap([{day:'一',slot:'0800-1000'}],'二','0800-1000'),
-    'F:0600-0800 vs 0800-1000':slotsOverlap([{day:'一',slot:'0600-0800'}],'一','0800-1000')
+    'E:diff day no overlap':slotsOverlap([{day:'一',slot:'0800-1000'}],'二','0800-1000'),
+    'F:0600-0800 vs 0800-1000':slotsOverlap([{day:'一',slot:'0600-0800'}],'一','0800-1000'),
+    'G:cross-day 日2300-0100 vs 一0000-0200':slotsOverlap([{day:'日',slot:'2300-0100'}],'一','0000-0200'),
+    'H:cross-day 六2200-0000 vs 日0000-0200':slotsOverlap([{day:'六',slot:'2200-0000'}],'日','0000-0200'),
+    'I:cross-day no overlap 日2300-0100 vs 一0200-0400':slotsOverlap([{day:'日',slot:'2300-0100'}],'一','0200-0400')
   };});
 
   console.log('\n=== slotsOverlap Unit Tests ===');
   const exp={'A:2200-0000 vs 2300-0100':true,'B:2000-2200 vs 2300-0100':false,
     'C:2200-2300 vs 2200-0000':true,'D:0800-1000 vs 0800-1000':true,
-    'E:diff day':false,'F:0600-0800 vs 0800-1000':false};
+    'E:diff day no overlap':false,'F:0600-0800 vs 0800-1000':false,
+    'G:cross-day 日2300-0100 vs 一0000-0200':true,
+    'H:cross-day 六2200-0000 vs 日0000-0200':false,
+    'I:cross-day no overlap 日2300-0100 vs 一0200-0400':false};
   for(const[k,v]of Object.entries(unit)){
     const e=exp[k],ok=v===e;
     console.log('  '+k+': '+v+' (exp '+e+') '+(ok?'PASS':'FAIL'));
