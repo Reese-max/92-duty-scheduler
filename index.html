@@ -593,7 +593,7 @@ function getAvailable(dutyType,day,slot,tempRelease){
   });
 }
 function generateEmptySchedule(){
-  S.assignments={};S.thisWeekIds=new Set();
+  S.assignments={};S.thisWeekIds=new Set();S.holidays={};
   Object.keys(S.active).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
     S.assignments[dtype]={};
@@ -635,6 +635,9 @@ function fillRemainingSlots(){
           if(dtype==='校巡'&&isNightSlot(slot)&&s.gender==='女')return false;
           if(lastWeek.has(s.id))return false;
           if(!isStudentFree(s.dept,day,slot))return false;
+          if(S.thisWeekIds.has(s.id))return false;
+          var aSlots=assignedSlots.get(s.id)||[];
+          if(slotsOverlap(aSlots,day,slot))return false;
           return true;
         }).length;
         for(var i=0;i<cfg.pp;i++){
@@ -1183,7 +1186,9 @@ function exportExcel(){
   var HORIZ={'校巡':true};
   var TITLE_MAP={'\u503C\u73ED':'\u968A\u90E8\u503C\u73ED\u8868','\u591C\u5DE1':'\u53CB\u8ABC\u3001\u8B66\u82F1\u591C\u5DE1\u52E4\u52D9\u8868','\u9031\u9593':'\u9031\u9593\u6821\u5DE1\u52E4\u52D9\u8868','\u6821\u5DE1':'\u7E3D\u968A\u503C\u661F\u5047\u65E5\u6821\u5712\u5DE1\u908F\u52E4\u52D9\u8868','\u5BE2\u5DE1':' \u5BE2\u5DE1\u52E4\u52D9\u8868','\u8B66\u6280\u9928':' \u8B66\u6280\u9928\u503C\u73ED\u52E4\u52D9\u8868','\u76E3\u5EDA':'\u76E3\u5EDA\u52E4\u52D9\u8868','\u7E3D\u968A\u503C\u661F':' \u7E3D\u968A\u503C\u661F\u9031\u968A\u90E8\u503C\u73ED\u8868'};
 
-  Object.keys(S.active).forEach(function(dtype){
+  /* Explicit sheet order matching reference ODS */
+  var SHEET_ORDER=['\u503C\u73ED','\u591C\u5DE1','\u9031\u9593','\u6821\u5DE1','\u5BE2\u5DE1','\u8B66\u6280\u9928','\u76E3\u5EDA','\u7E3D\u968A\u503C\u661F'];
+  SHEET_ORDER.filter(function(dt){return S.active[dt];}).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
     var days=cfg.days,pp=cfg.pp,horiz=!!HORIZ[dtype];
     var colsPerDay=horiz?pp*2:2;
@@ -1351,6 +1356,9 @@ function exportExcel(){
     }
     ws['!cols']=cw;
     ws['!rows']=rh;
+    /* Print setup: landscape, fit to 1 page wide, narrow margins */
+    ws['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:0,paperSize:9};
+    ws['!margins']={left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2};
 
     XLSX.utils.book_append_sheet(wb,ws,def.label.replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31));
   });
