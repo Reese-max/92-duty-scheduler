@@ -194,6 +194,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .pk-badge.lastWeek{background:rgba(52,152,219,.18);color:#3498db}
 .pk-badge.gender{background:rgba(155,89,182,.18);color:#9b59b6}
 .pk-badge.night{background:rgba(52,73,94,.25);color:#7f8c8d}
+.pk-badge.conflict{background:rgba(231,76,60,.2);color:#c0392b}
 .pk-item.forced{opacity:.8;border-left:3px solid var(--gold)}
 
 /* === Toast with animation === */
@@ -561,6 +562,20 @@ function slotsOverlap(slots,day,slot){
   }
   return false;
 }
+function getAssignedSlots(sid){
+  var slots=[];
+  Object.keys(S.assignments).forEach(function(dt){
+    Object.keys(S.assignments[dt]).forEach(function(k){
+      S.assignments[dt][k].forEach(function(p){
+        if(p&&p.id===sid){
+          var parts=k.split('|');
+          slots.push({day:parts[0],slot:parts[1]});
+        }
+      });
+    });
+  });
+  return slots;
+}
 /* Use studentMap for O(1) lookup instead of linear find() (Defect #22) */
 function getStudentGender(id){var s=S.studentMap[id];return s?s.gender:null;}
 function getAvailable(dutyType,day,slot,tempRelease){
@@ -571,6 +586,9 @@ function getAvailable(dutyType,day,slot,tempRelease){
     if(S.thisWeekIds.has(s.id)&&!(tempRelease&&tempRelease.has(s.id)))return false;
     if(lastWeek.has(s.id))return false;
     if(!isStudentFree(s.dept,day,slot))return false;
+    var aSlots=getAssignedSlots(s.id);
+    if(tempRelease&&tempRelease.has(s.id)){aSlots=aSlots.filter(function(sl){return sl.day!==day||sl.slot!==slot;});}
+    if(slotsOverlap(aSlots,day,slot))return false;
     return true;
   });
 }
@@ -905,6 +923,9 @@ function getAllStudentsForPicker(dtype,day,slot,slotIds,current){
     if(S.thisWeekIds.has(s.id)&&!(tempRelease&&tempRelease.has(s.id)))reasons.push('thisWeek');
     if(lastWeek.has(s.id))reasons.push('lastWeek');
     if(!isStudentFree(s.dept,day,slot))reasons.push('busy');
+    var aSlots=getAssignedSlots(s.id);
+    if(tempRelease&&tempRelease.has(s.id)){aSlots=aSlots.filter(function(sl){return sl.day!==day||sl.slot!==slot;});}
+    if(slotsOverlap(aSlots,day,slot))reasons.push('conflict');
     return{id:s.id,name:s.name,dept:s.dept,gender:s.gender,reasons:reasons};
   });
 }
@@ -991,6 +1012,7 @@ function renderPickerList(candidates,current,showAll){
         else if(r==='lastWeek')badge.textContent='上週';
         else if(r==='gender')badge.textContent='性別';
         else if(r==='night')badge.textContent='夜間';
+        else if(r==='conflict')badge.textContent='衝突';
         nameSpan.appendChild(badge);
       });
     }
@@ -1144,7 +1166,7 @@ function exportExcel(){
   /* Gray fill for empty (unfilled) cells */
   var grayFill={patternType:'solid',fgColor:{rgb:'D8D8D8'}};
   /* Per-sheet font sizes: {title, hdrLabel(col A), dateVal, dayVal(weekday), time, data(ID/Name), note} */
-  var FONT_SIZES={'\u503C\u73ED':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:28},'\u591C\u5DE1':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u9031\u9593':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16},'\u6821\u5DE1':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16},'\u5BE2\u5DE1':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u8B66\u6280\u9928':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20},'\u76E3\u5EDA':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20},'\u7E3D\u968A\u503C\u661F':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20}};
+  var FONT_SIZES={'\u503C\u73ED':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:28},'\u591C\u5DE1':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'\u9031\u9593':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'\u6821\u5DE1':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16,holiday:16},'\u5BE2\u5DE1':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'\u8B66\u6280\u9928':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'\u76E3\u5EDA':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20,holiday:28},'\u7E3D\u968A\u503C\u661F':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20,holiday:25}};
   /* Column widths per duty type (matching reference ODS) */
   var COL_WIDTHS={'\u503C\u73ED':{time:9,id:7,name:20},'\u591C\u5DE1':{time:11,id:7,name:14},'\u9031\u9593':{time:11,id:7,name:14},'\u6821\u5DE1':{time:13,id:7,name:11},'\u5BE2\u5DE1':{time:11,id:7,name:14},'\u8B66\u6280\u9928':{time:11,id:7,name:14},'\u76E3\u5EDA':{time:19,id:8,name:12},'\u7E3D\u968A\u503C\u661F':{time:9,id:7,name:24}};
   /* Header row heights per duty type (title/date/weekday, matching reference ODS) */
