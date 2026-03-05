@@ -219,7 +219,6 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 /* === Animations === */
 @keyframes fadeSlideIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
 @keyframes fadeIn{from{opacity:0}to{opacity:1}}
-@keyframes tabSlide{from{transform:scaleX(0)}to{transform:scaleX(1)}}
 @keyframes tabSlideLeft{from{transform:scaleX(0);transform-origin:left}to{transform:scaleX(1);transform-origin:left}}
 @keyframes emptyPulse{0%,100%{opacity:.6}50%{opacity:1}}
 @keyframes countUp{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
@@ -940,9 +939,9 @@ function syncDayOrder(card){
     zone.appendChild(chip);
   });
   /* drop zone events */
-  zone.ondragover=function(e){e.preventDefault();e.dataTransfer.dropEffect='move';zone.classList.add('drag-over');};
-  zone.ondragleave=function(){zone.classList.remove('drag-over');};
-  zone.ondrop=function(e){
+  zone.addEventListener('dragover',function(e){e.preventDefault();e.dataTransfer.dropEffect='move';zone.classList.add('drag-over');});
+  zone.addEventListener('dragleave',function(){zone.classList.remove('drag-over');});
+  zone.addEventListener('drop',function(e){
     e.preventDefault();zone.classList.remove('drag-over');
     var dragging=zone.querySelector('.dragging');if(!dragging)return;
     var target=getDayChipAtPoint(zone,e.clientX);
@@ -952,7 +951,7 @@ function syncDayOrder(card){
       else{zone.insertBefore(dragging,target.nextSibling);}
     }
     updateConfigSummary();
-  };
+  });
 }
 function getDayChipAtPoint(zone,x){
   var chips=zone.querySelectorAll('.day-chip:not(.dragging)');
@@ -1166,13 +1165,6 @@ function openPicker(dtype,day,slot,idx,tdEl){
   $('pickerModal').classList.add('show');
   document.body.style.overflow='hidden';
   if(!isHolidayMode)setTimeout(function(){$('pickerSearch').focus();},150);
-  $('pickerSearch').oninput=function(){refreshPickerList();};
-  cb.onchange=function(){
-    pickerState.showAll=cb.checked;
-    toggle.classList.toggle('auto',false);
-    byId('pickerToggleLabel').textContent='顯示全部學員（忽略限制）';
-    refreshPickerList();
-  };
 }
 function refreshPickerList(){
   pickerHighlightIdx=-1; /* 重新篩選時重設鍵盤高亮索引 */
@@ -1892,7 +1884,7 @@ function runSelfTests(){
   assertTruthy('isStudentFree: 凌晨（6點前）視為空堂', isStudentFree('行政系','一','0300-0500'));
 
   /* --- isEligible（模擬測試，需暫存狀態） --- */
-  var origStudents=S.students,origThisWeek=S.thisWeekIds,origHistory=S.history,origWeekNum=S.weekNum,origAssignments=S.assignments;
+  var origStudents=S.students,origThisWeek=S.thisWeekIds,origHistory=S.history,origWeekNum=S.weekNum,origAssignments=S.assignments,origStudentMap=S.studentMap;
   S.students=[{id:1,name:'測試甲',gender:'男',dept:'行政系',note:''},{id:2,name:'測試乙',gender:'女',dept:'行政系',note:''},{id:3,name:'測試丙(退學)',gender:'男',dept:'行政系',note:''}];
   S.thisWeekIds=new Set();S.history={};S.weekNum=2;S.assignments={};
   assertTruthy('isEligible: 正常男學員應合格', isEligible(S.students[0],'值班','一','0800-1000',{lastWeek:new Set()}));
@@ -1901,7 +1893,7 @@ function runSelfTests(){
   S.thisWeekIds.add(1);
   assertFalsy('isEligible: 本週已排學員不得重複', isEligible(S.students[0],'值班','一','1000-1200',{lastWeek:new Set()}));
   assertFalsy('isEligible: 上週已排學員不得排班', isEligible(S.students[1],'校巡','六','0800-1000',{lastWeek:new Set([2])}));
-  S.students=origStudents;S.thisWeekIds=origThisWeek;S.history=origHistory;S.weekNum=origWeekNum;S.assignments=origAssignments;
+  S.students=origStudents;S.thisWeekIds=origThisWeek;S.history=origHistory;S.weekNum=origWeekNum;S.assignments=origAssignments;S.studentMap=origStudentMap;
 
   /* --- 結果摘要 --- */
   var summary='自測結果：'+passed+' 通過 / '+failed+' 失敗（共 '+(passed+failed)+' 項）';
@@ -1959,12 +1951,20 @@ function init(){
       showToast('已隨機填滿所有空格'+emptyMsg,S.emptySlotCount>0?'warn':undefined);
     },300);
   });
+  $('pickerSearch').addEventListener('input',function(){refreshPickerList();});
+  $('pickerShowAll').addEventListener('change',function(){
+    pickerState.showAll=this.checked;
+    byId('pickerToggle').classList.toggle('auto',false);
+    byId('pickerToggleLabel').textContent='顯示全部學員（忽略限制）';
+    refreshPickerList();
+  });
   $('btnReimport').addEventListener('click',function(){if(Object.keys(S.assignments).length>0){if(!confirm('確定要重新匯入？未儲存的排班資料將遺失。'))return;}showStep(['stepImport']);});
   $('btnReconfig').addEventListener('click',function(){if(Object.keys(S.assignments).length>0){if(!confirm('確定要重新設定？未儲存的排班資料將遺失。'))return;}showStep(['stepImport','stepConfig']);});
   $('btnUploadLastWeek').addEventListener('click',function(){$('lastWeekFile').click();});
   $('lastWeekFile').addEventListener('change',function(){
     var file=$('lastWeekFile').files[0];
     if(!file)return;
+    if(file.size>10*1024*1024){showToast('檔案過大（上限 10MB）','error');$('lastWeekFile').value='';return;}
     var reader=new FileReader();
     reader.onload=function(e){
       try{
