@@ -357,8 +357,8 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
   <section id="stepConfig" class="step">
     <h2><span class="num">2</span> 本週設定</h2>
     <div class="week-row">
-      <label>學期起始 <input type="date" id="semesterStart" value="2026-03-02" style="font-size:.85rem;padding:4px 6px;border-radius:6px;border:1px solid var(--border-l);background:var(--card);color:var(--text)"></label>
-      <label style="margin-left:12px">第 <input type="number" id="weekNum" min="1" max="20" value="1"> 週</label>
+      <label>學期起始 <input type="date" id="semesterStart" value="2026-03-02" autocomplete="off" style="font-size:.85rem;padding:4px 6px;border-radius:6px;border:1px solid var(--border-l);background:var(--card);color:var(--text)"></label>
+      <label style="margin-left:12px">第 <input type="number" id="weekNum" min="1" max="20" value="1" autocomplete="off"> 週</label>
       <span class="dates" id="weekDates"></span>
     </div>
     <div class="lastweek-upload" id="lastWeekUpload">
@@ -400,7 +400,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
       <h3 id="pickerTitle">選擇人員</h3>
       <button class="btn-x" id="pickerClose">&times;</button>
     </div>
-    <div class="modal-search"><input type="text" id="pickerSearch" placeholder="搜尋學號或姓名..."></div>
+    <div class="modal-search"><input type="text" id="pickerSearch" placeholder="搜尋學號或姓名..." autocomplete="off"></div>
     <label class="pk-toggle" id="pickerToggle"><input type="checkbox" id="pickerShowAll"><span id="pickerToggleLabel">顯示全部學員（忽略限制）</span></label>
     <div id="pickerClearRow" style="display:none"></div>
     <div id="pickerHolidayRow" style="display:none"></div>
@@ -828,6 +828,11 @@ function renderConfig(){
   });
   updateWeekDates();
   byId('weekNum').addEventListener('change',updateWeekDates);
+  /* 即時過濾非數字輸入，強化週數輸入驗證 */
+  byId('weekNum').addEventListener('input',function(){
+    var v=this.value.replace(/[^0-9]/g,'');
+    if(v!==this.value)this.value=v;
+  });
 }
 function updateWeekDates(){
   var raw=parseInt($('weekNum').value)||1;
@@ -1052,7 +1057,7 @@ function openPicker(dtype,day,slot,idx,tdEl){
 }
 function refreshPickerList(){
   pickerHighlightIdx=-1; /* 重新篩選時重設鍵盤高亮索引 */
-  var q=byId('pickerSearch').value.trim().toLowerCase();
+  var q=byId('pickerSearch').value.trim().toLowerCase().slice(0,50); /* 限制搜尋長度防止 DoS */
   var src=pickerState.showAll?pickerState.allStudents:pickerState.candidates;
   var filtered=q?src.filter(function(s){return String(s.id).indexOf(q)>=0||s.name.toLowerCase().indexOf(q)>=0||s.dept.toLowerCase().indexOf(q)>=0;}):src;
   renderPickerList(filtered,pickerState.current,pickerState.showAll);
@@ -1623,6 +1628,8 @@ function exportBackup(){
   showToast('歷史備份已匯出');
 }
 function importBackup(file){
+  /* 檔案大小限制：防止匯入過大的備份檔 */
+  if(file.size>5*1024*1024){showToast('備份檔案過大（上限 5MB）');return;}
   var reader=new FileReader();
   reader.onload=function(e){
     try{
@@ -1658,6 +1665,12 @@ function saveWeek(){
 
 /* ===== INIT ===== */
 function handleFile(file){
+  /* 驗證 Excel 檔案副檔名 */
+  var validTypes=['.xlsx','.xls','.xlsm','.xlsb','.ods'];
+  var ext=file.name.toLowerCase().match(/\.[^.]+$/);
+  if(!ext||validTypes.indexOf(ext[0])<0){
+    showToast('不支援的檔案格式，請選擇 Excel 檔案（.xlsx）');return;
+  }
   var reader=new FileReader();
   reader.onload=function(e){
     try{
@@ -1784,6 +1797,8 @@ function init(){
   dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('dragover');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
   fi.addEventListener('change',function(){if(fi.files[0])handleFile(fi.files[0]);fi.value='';});
   $('btnSchedule').addEventListener('click',function(){
+    /* 防止未匯入學員就排勤 */
+    if(S.students.length===0){showToast('請先匯入學員名冊');return;}
     var btn=$('btnSchedule');
     btn.disabled=true;
     var spinner=h('span',{className:'spinner'});
