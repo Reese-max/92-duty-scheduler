@@ -1707,8 +1707,8 @@ function handleFile(file){
 function runSelfTests(){
   var passed=0, failed=0, results=[];
   function assert(name, actual, expected){
-    if(actual===expected){passed++;results.push('\u2713 '+name);}
-    else{failed++;results.push('\u2715 '+name+': 預期 '+JSON.stringify(expected)+' 但得到 '+JSON.stringify(actual));}
+    if(actual===expected){passed++;results.push('✓ '+name);}
+    else{failed++;results.push('✕ '+name+': 預期 '+JSON.stringify(expected)+' 但得到 '+JSON.stringify(actual));}
   }
   function assertTruthy(name, val){assert(name, !!val, true);}
   function assertFalsy(name, val){assert(name, !!val, false);}
@@ -1727,21 +1727,21 @@ function runSelfTests(){
   assert('slotHours("1200-1350") 近似值', Math.abs(sh-110/60)<0.001, true);
 
   /* --- slotsOverlap --- */
-  assertTruthy('slotsOverlap: 完全重疊', slotsOverlap([{day:'\u4e00',slot:'0800-1000'}], '\u4e00', '0800-1000'));
-  assertTruthy('slotsOverlap: 部分重疊', slotsOverlap([{day:'\u4e00',slot:'0800-1000'}], '\u4e00', '0900-1100'));
-  assertFalsy('slotsOverlap: 不重疊', slotsOverlap([{day:'\u4e00',slot:'0800-1000'}], '\u4e00', '1000-1200'));
-  assertFalsy('slotsOverlap: 不同天', slotsOverlap([{day:'\u4e00',slot:'0800-1000'}], '\u4e8c', '0800-1000'));
-  assertFalsy('slotsOverlap: 空陣列', slotsOverlap([], '\u4e00', '0800-1000'));
-  assertTruthy('slotsOverlap: 跨日重疊', slotsOverlap([{day:'\u65e5',slot:'2300-0100'}], '\u65e5', '2200-2400'));
+  assertTruthy('slotsOverlap: 完全重疊', slotsOverlap([{day:'一',slot:'0800-1000'}], '一', '0800-1000'));
+  assertTruthy('slotsOverlap: 部分重疊', slotsOverlap([{day:'一',slot:'0800-1000'}], '一', '0900-1100'));
+  assertFalsy('slotsOverlap: 不重疊', slotsOverlap([{day:'一',slot:'0800-1000'}], '一', '1000-1200'));
+  assertFalsy('slotsOverlap: 不同天', slotsOverlap([{day:'一',slot:'0800-1000'}], '二', '0800-1000'));
+  assertFalsy('slotsOverlap: 空陣列', slotsOverlap([], '一', '0800-1000'));
+  assertTruthy('slotsOverlap: 跨日重疊', slotsOverlap([{day:'日',slot:'2300-0100'}], '日', '2200-2400'));
 
   /* --- fmtSlot --- */
   assert('fmtSlot("0800-1000")', fmtSlot('0800-1000'), '08:00-10:00');
   assert('fmtSlot("2300-0100")', fmtSlot('2300-0100'), '23:00-01:00');
 
   /* --- dayOffset --- */
-  assert('dayOffset("\u4e00")', dayOffset('\u4e00'), 0);
-  assert('dayOffset("\u65e5")', dayOffset('\u65e5'), 6);
-  assert('dayOffset("\u4e09")', dayOffset('\u4e09'), 2);
+  assert('dayOffset("一")', dayOffset('一'), 0);
+  assert('dayOffset("日")', dayOffset('日'), 6);
+  assert('dayOffset("三")', dayOffset('三'), 2);
 
   /* --- isNightSlot --- */
   assertTruthy('isNightSlot("2000-2200")', isNightSlot('2000-2200'));
@@ -1749,20 +1749,20 @@ function runSelfTests(){
   assertTruthy('isNightSlot("2300-0100")', isNightSlot('2300-0100'));
 
   /* --- isWithdrawn --- */
-  assertTruthy('isWithdrawn: 退學', isWithdrawn({name:'\u5f35\u4e09(\u9000\u5b78)',note:''}));
-  assertTruthy('isWithdrawn: 休學 in note', isWithdrawn({name:'\u674e\u56db',note:'\u4f11\u5b78\u4e2d'}));
-  assertFalsy('isWithdrawn: 正常', isWithdrawn({name:'\u738b\u4e94',note:''}));
+  assertTruthy('isWithdrawn: 退學', isWithdrawn({name:'張三(退學)',note:''}));
+  assertTruthy('isWithdrawn: 休學 in note', isWithdrawn({name:'李四',note:'休學中'}));
+  assertFalsy('isWithdrawn: 正常', isWithdrawn({name:'王五',note:''}));
 
   /* --- getDeptShort --- */
-  assert('getDeptShort: 行政系', getDeptShort('\u884c\u653f\u7cfb'), '\u884c\u653f\u7cfb');
-  assert('getDeptShort: 犯防系預防組', getDeptShort('\u72af\u9632\u7cfb\u9810\u9632\u7d44'), '\u72af\u9810');
+  assert('getDeptShort: 行政系', getDeptShort('行政系'), '行政系');
+  assert('getDeptShort: 犯防系預防組', getDeptShort('犯防系預防組'), '犯預');
 
   /* --- 結果摘要 --- */
-  var summary='\u81ea\u6e2c\u7d50\u679c\uff1a'+passed+' \u901a\u904e / '+failed+' \u5931\u6557\uff08\u5171 '+(passed+failed)+' \u9805\uff09';
+  var summary='自測結果：'+passed+' 通過 / '+failed+' 失敗（共 '+(passed+failed)+' 項）';
   console.log(summary);
   results.forEach(function(r){console.log(r);});
-  if(failed>0){console.error('\u26a0 \u6709 '+failed+' \u9805\u6e2c\u8a66\u5931\u6557\uff01');}
-  else{console.log('\u2713 \u6240\u6709\u81ea\u6e2c\u901a\u904e');}
+  if(failed>0){console.error('⚠ 有 '+failed+' 項測試失敗！');}
+  else{console.log('✓ 所有自測通過');}
   return {passed:passed, failed:failed, results:results};
 }
 
@@ -1906,6 +1906,13 @@ function init(){
       }
     }
   });
+  /* 開發模式自測（URL 含 ?test 參數時自動執行） */
+  if(location.search.indexOf('test')>=0){
+    setTimeout(function(){
+      var r=runSelfTests();
+      showToast('自測：'+r.passed+' 通過 / '+r.failed+' 失敗');
+    },500);
+  }
 }
 document.addEventListener('DOMContentLoaded',init);
 </script>
