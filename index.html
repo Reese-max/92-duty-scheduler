@@ -3,9 +3,10 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
 <title>92期1隊 半自動勤排系統</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
-<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js" integrity="sha384-OUW9euuUyxyHcAhTqbhI+Iyb8LMssXt/cpz0yXhs9UWG2/R/uaWdakx/4cfww7Vb" crossorigin="anonymous"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -335,22 +336,28 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 <body>
 <header>
   <h1>92期1隊 半自動勤排系統<em>114-2</em></h1>
-  <span class="ver">v2.1</span>
+  <span class="ver">v2.3</span>
 </header>
 <main>
   <section id="stepImport" class="step active">
     <h2><span class="num">1</span> 匯入排班資料</h2>
-    <div class="drop-zone" id="dropZone">
+    <div class="drop-zone" id="dropZone" role="button" tabindex="0" aria-label="拖放或點擊上傳排班資料 Excel 檔案">
       <p>拖放 <strong>排班資料</strong> 到此處</p>
       <p class="hint">或點擊選擇檔案</p>
-      <input type="file" id="fileInput" accept=".xlsx,.xls">
+      <input type="file" id="fileInput" accept=".xlsx,.xls" aria-label="選擇排班資料檔案">
     </div>
     <div id="importStatus"></div>
+    <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
+      <button class="btn btn-outline btn-sm" id="btnBackupExport" style="font-size:.82rem;padding:8px 14px">匯出歷史備份</button>
+      <button class="btn btn-outline btn-sm" id="btnBackupImport" style="font-size:.82rem;padding:8px 14px">匯入歷史備份</button>
+      <input type="file" id="backupFile" accept=".json" style="display:none">
+    </div>
   </section>
   <section id="stepConfig" class="step">
     <h2><span class="num">2</span> 本週設定</h2>
     <div class="week-row">
-      <label>第 <input type="number" id="weekNum" min="1" max="20" value="1"> 週</label>
+      <label>學期起始 <input type="date" id="semesterStart" value="2026-03-02" style="font-size:.85rem;padding:4px 6px;border-radius:6px;border:1px solid var(--border-l);background:var(--card);color:var(--text)"></label>
+      <label style="margin-left:12px">第 <input type="number" id="weekNum" min="1" max="20" value="1"> 週</label>
       <span class="dates" id="weekDates"></span>
     </div>
     <div class="lastweek-upload" id="lastWeekUpload">
@@ -401,6 +408,15 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 </div>
 <div class="toast" id="toast"></div>
 <script>
+/* ===== Global error handler ===== */
+window.onerror=function(msg,src,line){
+  console.error('錯誤：'+msg+' (行 '+line+')');
+  var t=document.getElementById('toast');
+  if(t){t.textContent='系統錯誤：'+msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},4000);}
+};
+window.addEventListener('unhandledrejection',function(e){
+  console.error('未處理的 Promise 錯誤：',e.reason);
+});
 /* ===== Safe DOM helpers ===== */
 function h(tag,attrs,children){
   var e=document.createElement(tag);
@@ -421,6 +437,11 @@ function clearEl(el){while(el.firstChild)el.removeChild(el.firstChild);}
 
 /* ===== CONSTANTS ===== */
 var SEMESTER_START=new Date(2026,2,2);
+function getSemesterStart(){
+  var el=document.getElementById('semesterStart');
+  if(el&&el.value){var parts=el.value.split('-');return new Date(parseInt(parts[0]),parseInt(parts[1])-1,parseInt(parts[2]));}
+  return SEMESTER_START;
+}
 var DEPT_MAP={
   '行政系':'行政系','犯防系預防組':'犯預','犯防系矯治組':'犯矯',
   '交通系交通組':'交通（交交）','交通系電訊組':'交通（交電）',
@@ -443,6 +464,7 @@ var DUTY_DEFS={
 
 /* ===== STATE ===== */
 var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},holidays:{},holidayBackup:{},workbook:null,savedWeeks:new Set()};
+var undoStack=[];
 
 /* ===== UTILS ===== */
 function byId(id){return document.getElementById(id);}
@@ -452,7 +474,7 @@ function timeToMin(t){return parseInt(t.slice(0,2))*60+parseInt(t.slice(2));}
 function slotHours(slot){var p=slot.split('-'),s=timeToMin(p[0]),e=timeToMin(p[1]);if(e<=s)e+=1440;return(e-s)/60;}
 function fmtSlot(slot){var p=slot.split('-');return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
 function dayOffset(day){var m={'一':0,'二':1,'三':2,'四':3,'五':4,'六':5,'日':6};return m[day]!=null?m[day]:0;}
-function weekDate(wn,day){var d=new Date(SEMESTER_START);d.setDate(d.getDate()+(wn-1)*7+dayOffset(day));return(d.getMonth()+1)+'月'+d.getDate()+'日';}
+function weekDate(wn,day){var d=new Date(getSemesterStart());d.setDate(d.getDate()+(wn-1)*7+dayOffset(day));return(d.getMonth()+1)+'月'+d.getDate()+'日';}
 function weekRange(wn){return weekDate(wn,'一')+' — '+weekDate(wn,'日');}
 
 /* ===== Count-up Animation ===== */
@@ -509,7 +531,39 @@ function loadWorkbook(wb){
   }
   /* Build studentMap for O(1) gender lookup */
   S.students.forEach(function(s){S.studentMap[s.id]=s;});
-  try{var saved=JSON.parse(localStorage.getItem('dutySchedulerHistory')||'{}');S.history=saved.history||{};S.cumHours=saved.cumHours||{};if(saved.assignments){S.assignments=saved.assignments;S.thisWeekIds=new Set();Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){(S.assignments[dt][k]||[]).forEach(function(p){if(p)S.thisWeekIds.add(p.id);});});});}if(saved.holidays){S.holidays={};Object.keys(saved.holidays).forEach(function(k){S.holidays[k]=new Set(saved.holidays[k]);});}}catch(e){}
+  try{
+    var saved=JSON.parse(localStorage.getItem('dutySchedulerHistory')||'{}');
+    /* Schema validation: ensure data types are correct */
+    if(typeof saved!=='object'||saved===null) saved={};
+    if(typeof saved.history!=='object'||saved.history===null) saved.history={};
+    if(typeof saved.cumHours!=='object'||saved.cumHours===null) saved.cumHours={};
+    /* Validate cumHours values are numbers */
+    Object.keys(saved.cumHours).forEach(function(k){
+      if(typeof saved.cumHours[k]!=='number'||isNaN(saved.cumHours[k])) saved.cumHours[k]=0;
+    });
+    S.history=saved.history;S.cumHours=saved.cumHours;
+    /* Rebuild savedWeeks from history keys to prevent duplicate saves across reloads */
+    S.savedWeeks=new Set();
+    Object.keys(S.history).forEach(function(k){S.savedWeeks.add(parseInt(k));});
+    if(saved.assignments&&typeof saved.assignments==='object'){
+      S.assignments=saved.assignments;S.thisWeekIds=new Set();
+      Object.keys(S.assignments).forEach(function(dt){
+        if(typeof S.assignments[dt]!=='object') return;
+        Object.keys(S.assignments[dt]).forEach(function(k){
+          (S.assignments[dt][k]||[]).forEach(function(p){if(p&&p.id)S.thisWeekIds.add(p.id);});
+        });
+      });
+    }
+    if(saved.holidays&&typeof saved.holidays==='object'){
+      S.holidays={};
+      Object.keys(saved.holidays).forEach(function(k){
+        if(Array.isArray(saved.holidays[k])) S.holidays[k]=new Set(saved.holidays[k]);
+      });
+    }
+  }catch(e){
+    console.warn('localStorage 資料損壞，已重置：',e.message);
+    S.history={};S.cumHours={};S.savedWeeks=new Set();
+  }
 }
 
 /* ===== SCHEDULING ENGINE ===== */
@@ -587,18 +641,26 @@ function getAssignedSlots(sid){
 }
 /* Use studentMap for O(1) lookup instead of linear find() (Defect #22) */
 function getStudentGender(id){var s=S.studentMap[id];return s?s.gender:null;}
+/* Check if student is withdrawn (退學/休學/開除) */
+function isWithdrawn(s){return /退學|休學|開除/.test(s.name)||/退學|休學|開除/.test(s.note);}
+/* Shared eligibility check — single source of truth for all scheduling filters */
+function isEligible(s,dutyType,day,slot,opts){
+  if(isWithdrawn(s))return false;
+  var def=DUTY_DEFS[dutyType];
+  if(def.maleOnly&&s.gender!=='男')return false;
+  if(dutyType==='校巡'&&isNightSlot(slot)&&s.gender==='女')return false;
+  var lastWeek=opts.lastWeek||getLastWeekIds();
+  if(lastWeek.has(s.id))return false;
+  if(!isStudentFree(s.dept,day,slot))return false;
+  if(S.thisWeekIds.has(s.id)&&!(opts.tempRelease&&opts.tempRelease.has(s.id)))return false;
+  var aSlots=opts.slotsMap?opts.slotsMap.get(s.id)||[]:getAssignedSlots(s.id);
+  if(opts.tempRelease&&opts.tempRelease.has(s.id)){aSlots=aSlots.filter(function(sl){return sl.day!==day||sl.slot!==slot;});}
+  if(slotsOverlap(aSlots,day,slot))return false;
+  return true;
+}
 function getAvailable(dutyType,day,slot,tempRelease){
-  var def=DUTY_DEFS[dutyType],lastWeek=getLastWeekIds();
   return S.students.filter(function(s){
-    if(def.maleOnly&&s.gender!=='男')return false;
-    if(dutyType==='校巡'&&isNightSlot(slot)&&s.gender==='女')return false;
-    if(S.thisWeekIds.has(s.id)&&!(tempRelease&&tempRelease.has(s.id)))return false;
-    if(lastWeek.has(s.id))return false;
-    if(!isStudentFree(s.dept,day,slot))return false;
-    var aSlots=getAssignedSlots(s.id);
-    if(tempRelease&&tempRelease.has(s.id)){aSlots=aSlots.filter(function(sl){return sl.day!==day||sl.slot!==slot;});}
-    if(slotsOverlap(aSlots,day,slot))return false;
-    return true;
+    return isEligible(s,dutyType,day,slot,{tempRelease:tempRelease});
   });
 }
 function generateEmptySchedule(){
@@ -640,14 +702,7 @@ function fillRemainingSlots(){
         var key=day+'|'+slot;
         if(!S.assignments[dtype][key])S.assignments[dtype][key]=[];
         var eligible=S.students.filter(function(s){
-          if(def.maleOnly&&s.gender!=='男')return false;
-          if(dtype==='校巡'&&isNightSlot(slot)&&s.gender==='女')return false;
-          if(lastWeek.has(s.id))return false;
-          if(!isStudentFree(s.dept,day,slot))return false;
-          if(S.thisWeekIds.has(s.id))return false;
-          var aSlots=assignedSlots.get(s.id)||[];
-          if(slotsOverlap(aSlots,day,slot))return false;
-          return true;
+          return isEligible(s,dtype,day,slot,{lastWeek:lastWeek,slotsMap:assignedSlots});
         }).length;
         for(var i=0;i<cfg.pp;i++){
           if(!S.assignments[dtype][key][i]){
@@ -658,19 +713,13 @@ function fillRemainingSlots(){
     });
   });
   targets.sort(function(a,b){return a.eligible-b.eligible;});
-  var fillCount=0;
+  var fillCount=0,RESORT_INTERVAL=10;
   for(var t=0;t<targets.length;t++){
-    if(fillCount>0&&fillCount%10===0){
+    if(fillCount>0&&fillCount%RESORT_INTERVAL===0){
       for(var rt=t;rt<targets.length;rt++){
         var rtg=targets[rt],rdef=DUTY_DEFS[rtg.dtype];
         rtg.eligible=S.students.filter(function(s){
-          if(rdef.maleOnly&&s.gender!=='男')return false;
-          if(rtg.dtype==='校巡'&&isNightSlot(rtg.slot)&&s.gender==='女')return false;
-          if(S.thisWeekIds.has(s.id))return false;
-          if(lastWeek.has(s.id))return false;
-          if(!isStudentFree(s.dept,rtg.day,rtg.slot))return false;
-          if(slotsOverlap(assignedSlots.get(s.id),rtg.day,rtg.slot))return false;
-          return true;
+          return isEligible(s,rtg.dtype,rtg.day,rtg.slot,{lastWeek:lastWeek,slotsMap:assignedSlots});
         }).length;
       }
       var remaining=targets.slice(t);
@@ -679,16 +728,11 @@ function fillRemainingSlots(){
     }
     var tg=targets[t],def=DUTY_DEFS[tg.dtype];
     var cands=S.students.filter(function(s){
-      if(def.maleOnly&&s.gender!=='男')return false;
-      if(tg.dtype==='校巡'&&isNightSlot(tg.slot)&&s.gender==='女')return false;
-      if(S.thisWeekIds.has(s.id))return false;
-      if(lastWeek.has(s.id))return false;
-      if(!isStudentFree(s.dept,tg.day,tg.slot))return false;
-      /* Cross-duty time overlap guard (Defect #4): reject if slot overlaps an already-assigned slot */
-      if(slotsOverlap(assignedSlots.get(s.id),tg.day,tg.slot))return false;
-      return true;
+      return isEligible(s,tg.dtype,tg.day,tg.slot,{lastWeek:lastWeek,slotsMap:assignedSlots});
     });
-    cands.sort(function(a,b){return(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0)||(Math.random()-0.5);});
+    /* Fisher-Yates shuffle then stable sort by cumHours (fixes non-deterministic comparator) */
+    for(var fi=cands.length-1;fi>0;fi--){var fj=Math.floor(Math.random()*(fi+1));var ft=cands[fi];cands[fi]=cands[fj];cands[fj]=ft;}
+    cands.sort(function(a,b){return(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);});
     if(tg.dtype==='校巡'&&tg.idx>0&&cands.length>0){
       var assigned=S.assignments[tg.dtype][tg.key];
       var hasM=assigned.some(function(p){return p&&getStudentGender(p.id)==='男';});
@@ -713,7 +757,7 @@ function fillRemainingSlots(){
   var emptyCount=0;
   for(var t2=0;t2<targets.length;t2++){
     var tg2=targets[t2];
-    if(!S.assignments[tg2.dtype][tg2.key]||S.assignments[tg2.dtype][tg2.key].length<=tg2.idx){emptyCount++;}
+    if(!S.assignments[tg2.dtype][tg2.key]||!S.assignments[tg2.dtype][tg2.key][tg2.idx]){emptyCount++;}
   }
   S.emptySlotCount=emptyCount;
 }
@@ -774,17 +818,21 @@ function renderConfig(){
       if(e.target.closest('.cfg-pp'))return;
       card.classList.toggle('selected');
       var ck=card.querySelector('.dc-check'),sel=card.classList.contains('selected');
-      ck.textContent=sel?'\u2713':'';
+      ck.textContent=sel?'✓':'';
       ck.setAttribute('aria-checked',sel?'true':'false');
       updateConfigSummary();
     });
-    ppInput.addEventListener('change',updateConfigSummary);
+    ppInput.addEventListener('change',function(){var v=parseInt(this.value)||1;if(v<1)v=1;if(v>10)v=10;this.value=v;updateConfigSummary();});
+    ppInput.addEventListener('input',updateConfigSummary);
   });
   updateWeekDates();
   byId('weekNum').addEventListener('change',updateWeekDates);
 }
 function updateWeekDates(){
-  S.weekNum=parseInt($('weekNum').value)||1;
+  var raw=parseInt($('weekNum').value)||1;
+  if(raw<1)raw=1;if(raw>20)raw=20;
+  $('weekNum').value=raw;
+  S.weekNum=raw;
   $('weekDates').textContent=weekRange(S.weekNum);
   var prevWeek=S.weekNum-1;
   var st=$('lastWeekStatus');
@@ -823,7 +871,7 @@ function updateConfigSummary(){
     {t:'需求',n:totalSlots,c:''},
     {t:'可用男',n:availM,c:''},
     {t:'可用女',n:availF,c:''},
-    {t:ok?'\u2713 人數充足 (未含空堂限制)':'\u26A0 人數不足 (未含空堂限制)',n:'',c:ok?'sb-ok':'sb-err'}
+    {t:ok?'✓ 人數充足 (未含空堂限制)':'⚠ 人數不足 (未含空堂限制)',n:'',c:ok?'sb-ok':'sb-err'}
   ];
   items.forEach(function(it){
     var item=h('div',{className:'sb-item'+(it.c?' '+it.c:'')});
@@ -831,7 +879,7 @@ function updateConfigSummary(){
     if(it.n!==''){var sp=h('span',{className:'sb-num'},String(it.n));item.appendChild(sp);}
     bar.appendChild(item);
   });
-  var lastInfo=h('div',{className:'sb-item',style:'font-size:.78rem;color:var(--text-d)'},'\u4E0A\u9031\u5DF2\u6392 '+lastWeek.size+' \u4EBA');
+  var lastInfo=h('div',{className:'sb-item',style:'font-size:.78rem;color:var(--text-d)'},'上週已排 '+lastWeek.size+' 人');
   bar.appendChild(lastInfo);
 }
 
@@ -966,7 +1014,7 @@ function openPicker(dtype,day,slot,idx,tdEl){
   var hkey=day+'|'+slot;
   var isH=S.holidays[dtype]&&S.holidays[dtype].has(hkey);
   hRow.style.display='block';
-  var hBtn=h('div',{className:'pk-holiday'+(isH?' cancel':'')},isH?'\u21A9 取消此時段放假':'\uD83C\uDFD6 標記此時段放假');
+  var hBtn=h('div',{className:'pk-holiday'+(isH?' cancel':'')},isH?'↩ 取消此時段放假':'🏖 標記此時段放假');
   hBtn.addEventListener('click',function(){toggleSlotHoliday(dtype,day,slot,!isH);closePicker();});
   hRow.appendChild(hBtn);
   /* If holiday, hide student list */
@@ -998,7 +1046,7 @@ function renderPickerList(candidates,current,showAll){
   var clearRow=$('pickerClearRow');clearEl(clearRow);
   if(current){
     clearRow.style.display='block';
-    var clr=h('div',{className:'pk-clear'},'\u2715 清除此格（移除 '+current.id+' '+current.name+'）');
+    var clr=h('div',{className:'pk-clear'},'✕ 清除此格（移除 '+current.id+' '+current.name+'）');
     clr.addEventListener('click',function(){assignPerson(null);closePicker();});
     clearRow.appendChild(clr);
   }else{clearRow.style.display='none';}
@@ -1082,6 +1130,8 @@ function assignPerson(student){
   if(!S.assignments[ctx.dtype])S.assignments[ctx.dtype]={};
   if(!S.assignments[ctx.dtype][key])S.assignments[ctx.dtype][key]=[];
   var arr=S.assignments[ctx.dtype][key],old=arr[ctx.idx];
+  /* Push undo entry */
+  undoStack.push({dtype:ctx.dtype,key:key,idx:ctx.idx,prev:old?{id:old.id,name:old.name}:undefined,tdEl:ctx.tdEl});
   if(old){
     var still=false;
     Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){
@@ -1115,6 +1165,32 @@ function assignPerson(student){
   renderStatsBar();renderDashboard();
 }
 function closePicker(){$('pickerModal').classList.remove('show');document.body.style.overflow='';pickerCtx=null;}
+function undoLastAssign(){
+  if(undoStack.length===0){showToast('沒有可復原的操作');return;}
+  var u=undoStack.pop();
+  var arr=S.assignments[u.dtype]&&S.assignments[u.dtype][u.key];
+  if(!arr)return;
+  var cur=arr[u.idx];
+  if(cur){
+    var still=false;
+    Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){
+      S.assignments[dt][k].forEach(function(p,i){if(dt===u.dtype&&k===u.key&&i===u.idx)return;if(p&&p.id===cur.id)still=true;});
+    });});
+    if(!still)S.thisWeekIds.delete(cur.id);
+  }
+  arr[u.idx]=u.prev;
+  if(u.prev)S.thisWeekIds.add(u.prev.id);
+  if(u.tdEl){
+    clearEl(u.tdEl);u.tdEl.className='person-cell';
+    if(u.prev){u.tdEl.classList.add('filled');u.tdEl.appendChild(h('div',{className:'pid'},String(u.prev.id)));u.tdEl.appendChild(h('div',{className:'pname'},u.prev.name));}
+    else{u.tdEl.classList.add('empty-slot');u.tdEl.textContent='+';}
+  }else{
+    var panel=byId('panel-'+u.dtype);
+    if(panel){clearEl(panel);panel.appendChild(buildDutyTable(u.dtype));}
+  }
+  renderStatsBar();renderDashboard();
+  showToast('已復原'+(u.prev?' → '+u.prev.name:''));
+}
 
 /* ===== UI: Dashboard ===== */
 function renderDashboard(){
@@ -1192,31 +1268,42 @@ function exportExcel(){
   /* Gray fill for empty (unfilled) cells */
   var grayFill={patternType:'solid',fgColor:{rgb:'D8D8D8'}};
   /* Per-sheet font sizes: {title, hdrLabel(col A), dateVal, dayVal(weekday), time, data(ID/Name), note} */
-  var FONT_SIZES={'\u503C\u73ED':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:28},'\u591C\u5DE1':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'\u9031\u9593':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'\u6821\u5DE1':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16,holiday:16},'\u5BE2\u5DE1':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'\u8B66\u6280\u9928':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'\u76E3\u5EDA':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20,holiday:28},'\u7E3D\u968A\u503C\u661F':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20,holiday:25}};
+  var FONT_SIZES={'值班':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:28},'夜巡':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'週間':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'校巡':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16,holiday:16},'寢巡':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'警技館':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'監廚':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20,holiday:28},'總隊值星':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20,holiday:25}};
   /* Column widths per duty type (matching reference ODS) */
-  var COL_WIDTHS={'\u503C\u73ED':{time:9,id:7,name:20},'\u591C\u5DE1':{time:11,id:7,name:14},'\u9031\u9593':{time:11,id:7,name:14},'\u6821\u5DE1':{time:13,id:7,name:11},'\u5BE2\u5DE1':{time:11,id:7,name:14},'\u8B66\u6280\u9928':{time:11,id:7,name:14},'\u76E3\u5EDA':{time:19,id:8,name:12},'\u7E3D\u968A\u503C\u661F':{time:9,id:7,name:24}};
+  var COL_WIDTHS={'值班':{time:9,id:7,name:20},'夜巡':{time:11,id:7,name:14},'週間':{time:11,id:7,name:14},'校巡':{time:13,id:7,name:11},'寢巡':{time:11,id:7,name:14},'警技館':{time:11,id:7,name:14},'監廚':{time:19,id:8,name:12},'總隊值星':{time:9,id:7,name:24}};
   /* Header row heights per duty type (title/date/weekday, matching reference ODS) */
-  var HDR_HEIGHTS={'\u591C\u5DE1':{date:28,day:49},'\u6821\u5DE1':{date:29,day:22},'\u7E3D\u968A\u503C\u661F':{date:29,day:48}};
+  var HDR_HEIGHTS={'夜巡':{date:28,day:49},'校巡':{date:29,day:22},'總隊值星':{date:29,day:48}};
   /* Note section row heights per duty type (5 rows, matching reference ODS) */
-  var NOTE_HEIGHTS={'\u503C\u73ED':[30,49.5,39.75,30,51],'\u591C\u5DE1':[39.75,39.75,39.75,30,69.75],'\u9031\u9593':[39.75,39.75,39.75,30,39.75],'\u6821\u5DE1':[37,37,37,37,37],'\u5BE2\u5DE1':[30,49.5,39.75,30,39.75],'\u8B66\u6280\u9928':[30,49.5,39.75,30,39.75],'\u76E3\u5EDA':[39.75,39.75,39.75,30,39.75],'\u7E3D\u968A\u503C\u661F':[42,42,42,42,42]};
-  /* Time slot font override: \u5BE2\u5DE1/\u8B66\u6280\u9928 use \u6A19\u6977\u9AD4-\u7E41 */
-  var TIME_FONT={'\u5BE2\u5DE1':'\u6A19\u6977\u9AD4-\u7E41','\u8B66\u6280\u9928':'\u6A19\u6977\u9AD4-\u7E41'};
-  /* Slot format: raw=no colons, fullwidth=\uFF1A+newline, halfwidth=default */
-  var SLOT_FMT={'\u503C\u73ED':'raw','\u76E3\u5EDA':'raw','\u7E3D\u968A\u503C\u661F':'raw','\u6821\u5DE1':'raw','\u591C\u5DE1':'fullwidth','\u5BE2\u5DE1':'fullwidth','\u8B66\u6280\u9928':'fullwidth','\u9031\u9593':'fullwidth'};
-  function fmtSlotEx(slot,fmt){var p=slot.split('-');if(fmt==='raw')return p[0]+'-'+p[1];if(fmt==='fullwidth')return p[0].slice(0,2)+'\uFF1A'+p[0].slice(2)+'-\n'+p[1].slice(0,2)+'\uFF1A'+p[1].slice(2);return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
-  var noteText='\u5099\u8A3B\uFF1A\n1\u3001\u8F2A\u503C\u52E4\u52D9\uFF0C\u8ACB\u540C\u5B78\u52D9\u5FC5\u63D0\u65E95-10\u5206\u9418\u5230\u52E4\u3002\n2\u3001\u8ACB\u540C\u5B78\u4E92\u76F8\u63D0\u9192\u503C\u52E4\u6642\u9593\u3002\n3\u3001\u5982\u6709\u7591\u554F(\u5982\u885D\u5802\u3001\u56E0\u6545\u7121\u6CD5\u503C\u73ED\u7B49)\uFF0C\u8ACB\u5411\u52E4\u52D9\u6392\u8868\u54E1921127\u6C5F\u777F\u627F(B218)\u3001921165\u8B1D\u9821\u8B6F(B218)\u53CD\u6620\u3002\n4\u3001\u672C\u8868\u516C\u5E03\u5F8C\uFF0C\u8ACB\u540C\u5B78\u65BC\u81EA\u5DF1\u540D\u5B57\u4E0B\u65B9\u7C3D\u540D(\u62BC\u6642\u9593)\u78BA\u8A8D\uFF0C\u5982\u9700\u66F4\u6539\uFF0C\u8ACB\u5831\u7531\u5340\u968A\u9577\u6838\u7AE0\u4FEE\u6B63\uFF0C\u82E5\u903E\u6642\u672A\u7C3D\u540D\u8005\uFF0C\u5C07\u4F9D\u898F\u5B9A\u8A18\u9EDE\u8655\u5206\u3002';
+  var NOTE_HEIGHTS={'值班':[30,49.5,39.75,30,51],'夜巡':[39.75,39.75,39.75,30,69.75],'週間':[39.75,39.75,39.75,30,39.75],'校巡':[37,37,37,37,37],'寢巡':[30,49.5,39.75,30,39.75],'警技館':[30,49.5,39.75,30,39.75],'監廚':[39.75,39.75,39.75,30,39.75],'總隊值星':[42,42,42,42,42]};
+  /* Time slot font override */
+  var TIME_FONT={'寢巡':'標楷體-繁','警技館':'標楷體-繁'};
+  /* Slot format: raw=no colons, fullwidth=：+newline, halfwidth=default */
+  var SLOT_FMT={'值班':'raw','監廚':'raw','總隊值星':'raw','校巡':'raw','夜巡':'fullwidth','寢巡':'fullwidth','警技館':'fullwidth','週間':'fullwidth'};
+  function fmtSlotEx(slot,fmt){var p=slot.split('-');if(fmt==='raw')return p[0]+'-'+p[1];if(fmt==='fullwidth')return p[0].slice(0,2)+'：'+p[0].slice(2)+'-\n'+p[1].slice(0,2)+'：'+p[1].slice(2);return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
+  var noteText='備註：\n1、輪值勤務，請同學務必提早5-10分鐘到勤。\n2、請同學互相提醒值勤時間。\n3、如有疑問(如衝堂、因故無法值班等)，請向勤務排表員921127江睿承(B218)、921165謝顥譯(B218)反映。\n4、本表公布後，請同學於自己名字下方簽名(押時間)確認，如需更改，請報由區隊長核章修正，若逾時未簽名者，將依規定記點處分。';
   /* Horizontal layout: 校巡 (people side-by-side, pp*2 cols/day, 2 rows/slot) */
   var HORIZ={'校巡':true};
-  var TITLE_MAP={'\u503C\u73ED':'\u968A\u90E8\u503C\u73ED\u8868','\u591C\u5DE1':'\u53CB\u8ABC\u3001\u8B66\u82F1\u591C\u5DE1\u52E4\u52D9\u8868','\u9031\u9593':'\u9031\u9593\u6821\u5DE1\u52E4\u52D9\u8868','\u6821\u5DE1':'\u7E3D\u968A\u503C\u661F\u5047\u65E5\u6821\u5712\u5DE1\u908F\u52E4\u52D9\u8868','\u5BE2\u5DE1':' \u5BE2\u5DE1\u52E4\u52D9\u8868','\u8B66\u6280\u9928':' \u8B66\u6280\u9928\u503C\u73ED\u52E4\u52D9\u8868','\u76E3\u5EDA':'\u76E3\u5EDA\u52E4\u52D9\u8868','\u7E3D\u968A\u503C\u661F':' \u7E3D\u968A\u503C\u661F\u9031\u968A\u90E8\u503C\u73ED\u8868'};
+  var TITLE_MAP={'值班':'隊部值班表','夜巡':'友誼、警英夜巡勤務表','週間':'週間校巡勤務表','校巡':'總隊值星假日校園巡邏勤務表','寢巡':' 寢巡勤務表','警技館':' 警技館值班勤務表','監廚':'監廚勤務表','總隊值星':' 總隊值星週隊部值班表'};
 
   /* Explicit sheet order matching reference ODS */
-  var SHEET_ORDER=['\u503C\u73ED','\u591C\u5DE1','\u9031\u9593','\u6821\u5DE1','\u5BE2\u5DE1','\u8B66\u6280\u9928','\u76E3\u5EDA','\u7E3D\u968A\u503C\u661F'];
+  var SHEET_ORDER=['值班','夜巡','週間','校巡','寢巡','警技館','監廚','總隊值星'];
   SHEET_ORDER.filter(function(dt){return S.active[dt];}).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
     var days=cfg.days,pp=cfg.pp,horiz=!!HORIZ[dtype];
+    /* Override export day order for specific duty types */
+    var EXPORT_DAY_ORDER={'校巡':['五','六','日'],'警技館':['五','一','二','三','四']};
+    var exportOrder=EXPORT_DAY_ORDER[dtype];
+    if(exportOrder){days=exportOrder.filter(function(d){return cfg.days.indexOf(d)>=0;});}
+    /* Override export slot order for specific duty types */
+    var EXPORT_SLOT_ORDER={'夜巡':['0100-0300','0300-0500','2300-0100']};
+    var exportSlots=EXPORT_SLOT_ORDER[dtype]||def.slots;
     var colsPerDay=horiz?pp*2:2;
     var rowsPerSlot=horiz?2:pp*2;
     var totalCols=1+days.length*colsPerDay;
+    /* Minimum columns for layout (寢巡 needs 11 cols to match ODS) */
+    var MIN_COLS={'寢巡':11};
+    var minC=MIN_COLS[dtype];
+    if(minC&&totalCols<minC)totalCols=minC;
     var aoa=[],merges=[],rh=[];
     /* Per-sheet dynamic styles (no bold, font sizes vary by duty type) */
     var fs=FONT_SIZES[dtype]||{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20};
@@ -1237,31 +1324,31 @@ function exportExcel(){
     var sSigEmpty={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
     var sHoliday={font:{sz:fs.holiday||fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
 
-    /* Build per-slot holiday map for export: holidaySlotMap[dayIdx][slotIdx]=true */
+    /* Build per-slot holiday map for export: holidaySlotMap[dayIdx][exportSlotIdx]=true */
     var holidaySet=S.holidays[dtype]||new Set();
     var holidaySlotMap={};
-    for(var di=0;di<days.length;di++){for(var si=0;si<def.slots.length;si++){if(holidaySet.has(days[di]+'|'+def.slots[si])){if(!holidaySlotMap[di])holidaySlotMap[di]={};holidaySlotMap[di][si]=true;}}}
+    for(var di=0;di<days.length;di++){for(var esi=0;esi<exportSlots.length;esi++){if(holidaySet.has(days[di]+'|'+exportSlots[esi])){if(!holidaySlotMap[di])holidaySlotMap[di]={};holidaySlotMap[di][esi]=true;}}}
 
     /* Row 0: Title */
     var titleLabel=TITLE_MAP[dtype]||def.label;
-    var title='\u4E2D\u592E\u8B66\u5BDF\u5927\u5B78 92\u671F1\u968A 114\u5B78\u5E74\u5EA6\u7B2C2\u5B78\u671F'+titleLabel+' (\u7B2C'+S.weekNum+'\u9031)';
+    var title='中央警察大學 92期1隊  114學年度第2學期'+titleLabel+'  (第'+S.weekNum+'週)';
     var titleRow=new Array(totalCols).fill('');titleRow[0]=title;
     aoa.push(titleRow);merges.push({s:{r:0,c:0},e:{r:0,c:totalCols-1}});
     rh.push({hpt:33});
 
     /* Row 1: Dates */
-    var dateRow=new Array(totalCols).fill('');dateRow[0]='\u65E5\u671F';
+    var dateRow=new Array(totalCols).fill('');dateRow[0]='日期';
     for(var i=0;i<days.length;i++){var dc=1+i*colsPerDay;dateRow[dc]=weekDate(S.weekNum,days[i]);merges.push({s:{r:1,c:dc},e:{r:1,c:dc+colsPerDay-1}});}
     aoa.push(dateRow);rh.push({hpt:hh.date});
 
     /* Row 2: Days */
-    var dayRow=new Array(totalCols).fill('');dayRow[0]='\u661F\u671F';
+    var dayRow=new Array(totalCols).fill('');dayRow[0]='星期';
     for(var i=0;i<days.length;i++){var dc=1+i*colsPerDay;dayRow[dc]=days[i];merges.push({s:{r:2,c:dc},e:{r:2,c:dc+colsPerDay-1}});}
     aoa.push(dayRow);rh.push({hpt:hh.day});
 
     /* Data rows: each slot = name rows + signature rows */
     var r=3;
-    def.slots.forEach(function(slot,slotIdx){
+    exportSlots.forEach(function(slot,exportSlotIdx){
       if(horiz){
         /* Horizontal: 2 rows per slot (name + sig), pp people side by side */
         var nameRow=new Array(totalCols).fill('');
@@ -1274,7 +1361,7 @@ function exportExcel(){
             if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
           }
           /* Merge signature cells per person (skip holiday slots) */
-          if(!(holidaySlotMap[i]&&holidaySlotMap[i][slotIdx])){for(var p=0;p<pp;p++){
+          if(!(holidaySlotMap[i]&&holidaySlotMap[i][exportSlotIdx])){for(var p=0;p<pp;p++){
             var dc=1+i*colsPerDay+p*2;
             merges.push({s:{r:r+1,c:dc},e:{r:r+1,c:dc+1}});
           }}
@@ -1294,7 +1381,7 @@ function exportExcel(){
             var dc=1+i*2;
             if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
             /* Merge signature row B:C for this day (skip holiday slots) */
-            if(!(holidaySlotMap[i]&&holidaySlotMap[i][slotIdx]))merges.push({s:{r:r+p*2+1,c:dc},e:{r:r+p*2+1,c:dc+1}});
+            if(!(holidaySlotMap[i]&&holidaySlotMap[i][exportSlotIdx]))merges.push({s:{r:r+p*2+1,c:dc},e:{r:r+p*2+1,c:dc+1}});
           }
           aoa.push(nameRow);aoa.push(sigRow);
           rh.push({hpt:45});rh.push({hpt:60});
@@ -1325,6 +1412,15 @@ function exportExcel(){
       });
     });
 
+    /* 寢巡: merge blank area (cols 3~10) for date, day, and data rows */
+    if(MIN_COLS[dtype]&&totalCols>1+days.length*colsPerDay){
+      var blankStart=1+days.length*colsPerDay;
+      var blankEnd=totalCols-1;
+      merges.push({s:{r:1,c:blankStart},e:{r:1,c:blankEnd}});
+      merges.push({s:{r:2,c:blankStart},e:{r:2,c:blankEnd}});
+      if(noteR>3)merges.push({s:{r:3,c:blankStart},e:{r:noteR-1,c:blankEnd}});
+    }
+
     /* Note row */
     var nh=NOTE_HEIGHTS[dtype]||[36,36,36,36,36];
     var noteRow=new Array(totalCols).fill('');noteRow[0]=noteText;
@@ -1338,7 +1434,7 @@ function exportExcel(){
     ws['!merges']=merges;
 
     /* Set holiday text in merged anchor cells */
-    holidayAnchors.forEach(function(a){var addr=XLSX.utils.encode_cell(a);ws[addr]={t:'s',v:'\u653E\u5047'};});
+    holidayAnchors.forEach(function(a){var addr=XLSX.utils.encode_cell(a);ws[addr]={t:'s',v:'放假'};});
 
     /* Apply styles */
     var DATA_START_ROW = 3; // After title(0), date(1), weekday(2) rows
@@ -1358,12 +1454,14 @@ function exportExcel(){
           if(inH){ws[addr].s=sHoliday;}
           else{
           /* 判斷此格是否為空（無人指派）*/
-          var nameR=(R-3)%2===1?R-1:R;
-          var idC=(C-1)%2===0?C:C-1;
+          var rowOff=(R-DATA_START_ROW)%2; /* 0=name row, 1=sig row */
+          var nameR=rowOff===1?R-1:R;
+          var colOff=(C-1)%2; /* 0=id col, 1=name col */
+          var idC=colOff===0?C:C-1;
           var idAddr=XLSX.utils.encode_cell({r:nameR,c:idC});
           var slotEmpty=!ws[idAddr]||!ws[idAddr].v;
-          if((R-3)%2===1){ws[addr].s=slotEmpty?sSigEmpty:sSig;}
-          else if((C-1)%2===0){ws[addr].s=sId;}
+          if(rowOff===1){ws[addr].s=slotEmpty?sSigEmpty:sSig;}
+          else if(colOff===0){ws[addr].s=sId;}
           else{ws[addr].s=slotEmpty?sNameEmpty:sName;}
           }
         }
@@ -1385,13 +1483,41 @@ function exportExcel(){
 
     XLSX.utils.book_append_sheet(wb,ws,def.label.replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31));
   });
-  if(!wb.SheetNames.length){showToast('\u8ACB\u5148\u5B8C\u6210\u6392\u52E4\u518D\u532F\u51FA');return;}
-  var fname='\u52E4\u52D9\u6392\u73ED_\u7B2C'+S.weekNum+'\u9031.xlsx';
+  if(!wb.SheetNames.length){showToast('請先完成排勤再匯出');return;}
+  var fname='勤務排班_第'+S.weekNum+'週.xlsx';
   try{
     var wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
     var blob=new Blob([wbout],{type:'application/octet-stream'});
     downloadBlob(blob,fname);
-  }catch(e){showToast('\u532F\u51FA\u5931\u6557\uFF1A'+e.message);}
+  }catch(e){showToast('匯出失敗：'+e.message);}
+}
+
+/* ===== BACKUP / RESTORE ===== */
+function exportBackup(){
+  var data=localStorage.getItem('dutySchedulerHistory');
+  if(!data||data==='{}'){showToast('沒有可備份的歷史紀錄');return;}
+  var blob=new Blob([data],{type:'application/json'});
+  var url=URL.createObjectURL(blob);
+  var a=document.createElement('a');
+  a.href=url;a.download='勤排備份_'+new Date().toISOString().slice(0,10)+'.json';
+  a.style.display='none';document.body.appendChild(a);a.click();
+  setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},500);
+  showToast('歷史備份已匯出');
+}
+function importBackup(file){
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=JSON.parse(e.target.result);
+      if(typeof data!=='object'||data===null)throw new Error('格式無效');
+      if(!data.history&&!data.cumHours)throw new Error('找不到歷史紀錄資料');
+      localStorage.setItem('dutySchedulerHistory',JSON.stringify(data));
+      S.history=data.history||{};S.cumHours=data.cumHours||{};
+      S.savedWeeks=new Set();Object.keys(S.history).forEach(function(k){S.savedWeeks.add(parseInt(k));});
+      showToast('歷史備份已匯入（'+Object.keys(S.history).length+' 週）');
+    }catch(err){showToast('匯入失敗：'+err.message);}
+  };
+  reader.readAsText(file);
 }
 
 /* ===== PERSISTENCE ===== */
@@ -1421,7 +1547,7 @@ function handleFile(file){
       if(S.students.length===0)throw new Error('找不到勤務時數總表');
       var status=byId('importStatus');clearEl(status);
       var div=h('div',{className:'import-ok'},
-        '\u2713 匯入成功：'+S.students.length+' 位學員（男 '+S.students.filter(function(s){return s.gender==='男';}).length+' / 女 '+S.students.filter(function(s){return s.gender==='女';}).length+'），'+Object.keys(S.freePeriods).length+' 天空堂資料');
+        '✓ 匯入成功：'+S.students.length+' 位學員（男 '+S.students.filter(function(s){return s.gender==='男';}).length+' / 女 '+S.students.filter(function(s){return s.gender==='女';}).length+'），'+Object.keys(S.freePeriods).length+' 天空堂資料');
       status.appendChild(div);
       var details=h('details',{style:'margin-top:10px'});
       var summary=h('summary',{style:'cursor:pointer;color:var(--gold);font-size:.88rem'},'查看學員名冊');
@@ -1432,6 +1558,20 @@ function handleFile(file){
       });
       details.appendChild(rosterDiv);
       status.appendChild(details);
+      /* Check for withdrawn students */
+      var withdrawn=S.students.filter(isWithdrawn);
+      if(withdrawn.length>0){
+        var wNames=withdrawn.map(function(s){return s.id+' '+s.name;}).join('、');
+        status.appendChild(h('div',{className:'import-err',style:'background:rgba(243,156,18,.1);border-color:rgba(243,156,18,.25);color:var(--warning)'},
+          '⚠ 發現 '+withdrawn.length+' 位退學/休學學員（'+wNames+'），排班時將自動排除'));
+      }
+      /* Check for unknown departments */
+      _unknownDepts.clear();
+      S.students.forEach(function(s){getDeptShort(s.dept);});
+      if(_unknownDepts.size>0){
+        status.appendChild(h('div',{className:'import-err',style:'background:rgba(243,156,18,.1);border-color:rgba(243,156,18,.25);color:var(--warning)'},
+          '⚠ 發現 '+_unknownDepts.size+' 個未知科系：'+Array.from(_unknownDepts).join('、')+'（空堂判斷可能不準確）'));
+      }
       showStep(['stepImport','stepConfig']);
       updateConfigSummary();showToast('匯入成功');
     }catch(err){
@@ -1439,7 +1579,7 @@ function handleFile(file){
       if(msg.indexOf('找不到')>=0) msg = '找不到「勤務時數總表」工作表，請確認 Excel 檔案格式正確';
       else if(msg.indexOf('File is not')>=0 || msg.indexOf('Unsupported')>=0) msg = '不是有效的 Excel 檔案，請選擇 .xlsx 格式';
       var status=byId('importStatus');clearEl(status);
-      status.appendChild(h('div',{className:'import-err'},'\u2715 匯入失敗：'+msg));
+      status.appendChild(h('div',{className:'import-err'},'✕ 匯入失敗：'+msg));
     }
   };
   reader.readAsArrayBuffer(file);
@@ -1456,6 +1596,7 @@ function init(){
   renderConfig();
   var dz=byId('dropZone'),fi=byId('fileInput');
   dz.addEventListener('click',function(e){if(e.target!==fi)fi.click();});
+  dz.addEventListener('keydown',function(e){if(e.key==='Enter'||e.key===' '){e.preventDefault();fi.click();}});
   dz.addEventListener('dragover',function(e){e.preventDefault();dz.classList.add('dragover');});
   dz.addEventListener('dragleave',function(){dz.classList.remove('dragover');});
   dz.addEventListener('drop',function(e){e.preventDefault();dz.classList.remove('dragover');if(e.dataTransfer.files[0])handleFile(e.dataTransfer.files[0]);});
@@ -1484,7 +1625,8 @@ function init(){
       fillRemainingSlots();renderResults();renderDashboard();
       btn.removeChild(spinner);
       btn.disabled=false;
-      showToast('已隨機填滿所有空格');
+      var emptyMsg=S.emptySlotCount>0?'（仍有 '+S.emptySlotCount+' 格無法填入，請手動處理）':'';
+      showToast('已隨機填滿所有空格'+emptyMsg);
     },300);
   });
   $('btnReimport').addEventListener('click',function(){if(Object.keys(S.assignments).length>0){if(!confirm('確定要重新匯入？未儲存的排班資料將遺失。'))return;}showStep(['stepImport']);});
@@ -1519,11 +1661,18 @@ function init(){
       e.preventDefault();e.returnValue='您有未儲存的排班資料，確定要離開嗎？';
     }
   });
+  $('semesterStart').addEventListener('change',updateWeekDates);
   $('btnExport').addEventListener('click',exportExcel);
   $('btnSave').addEventListener('click',saveWeek);
+  $('btnBackupExport').addEventListener('click',exportBackup);
+  $('btnBackupImport').addEventListener('click',function(){$('backupFile').click();});
+  $('backupFile').addEventListener('change',function(){if(this.files[0])importBackup(this.files[0]);this.value='';});
   $('pickerClose').addEventListener('click',closePicker);
   $('pickerModal').addEventListener('click',function(e){if(e.target===$('pickerModal'))closePicker();});
-  document.addEventListener('keydown',function(e){if(e.key==='Escape')closePicker();});
+  document.addEventListener('keydown',function(e){
+    if(e.key==='Escape')closePicker();
+    if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.target.matches('input,textarea')){e.preventDefault();undoLastAssign();}
+  });
 }
 document.addEventListener('DOMContentLoaded',init);
 </script>
