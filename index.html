@@ -209,7 +209,11 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .pk-item.highlighted{background:rgba(42,82,152,.4);outline:2px solid var(--gold)}
 
 /* === Toast with animation === */
-.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(39,174,96,.95);color:#fff;padding:12px 28px;border-radius:10px;font-size:.92rem;z-index:300;opacity:0;transition:all .3s ease;pointer-events:none;box-shadow:0 4px 20px rgba(39,174,96,.3)}
+.toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);color:#fff;padding:12px 28px;border-radius:10px;font-size:.92rem;z-index:300;opacity:0;transition:all .3s ease;pointer-events:none}
+.toast.success{background:rgba(39,174,96,.95);box-shadow:0 4px 20px rgba(39,174,96,.3)}
+.toast.warn{background:rgba(243,156,18,.95);box-shadow:0 4px 20px rgba(243,156,18,.3)}
+.toast.error{background:rgba(231,76,60,.95);box-shadow:0 4px 20px rgba(231,76,60,.3)}
+.toast.info{background:rgba(52,152,219,.95);box-shadow:0 4px 20px rgba(52,152,219,.3)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* === Animations === */
@@ -384,7 +388,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
     <div class="duty-grid" id="dutyGrid"></div>
     <div class="summary-bar" id="configSummary" style="display:none"></div>
     <div class="btn-row">
-      <button class="btn btn-gold" id="btnSchedule" disabled>產生勤務表</button>
+      <button class="btn btn-gold" id="btnSchedule" disabled title="請先至少選擇一項勤務">產生勤務表</button>
       <button class="btn btn-outline" id="btnReimport">重新匯入</button>
     </div>
   </section>
@@ -394,6 +398,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
     <div class="tab-bar" id="resultTabs"></div>
     <div id="resultPanels"></div>
     <div class="btn-row" style="margin-top:18px">
+      <button class="btn btn-outline btn-sm" id="btnUndo" disabled title="復原上一步 (Ctrl+Z)">&#x21A9; 復原</button>
       <button class="btn btn-gold" id="btnFillEmpty">隨機填滿空格</button>
       <button class="btn btn-gold" id="btnExport">匯出 Excel</button>
       <button class="btn btn-blue" id="btnSave">儲存本週紀錄</button>
@@ -497,7 +502,14 @@ var undoStack=[];
 /* ===== UTILS ===== */
 function byId(id){return document.getElementById(id);}
 var $=byId;
-function showToast(msg){var t=byId('toast');t.textContent=msg;t.classList.add('show');setTimeout(function(){t.classList.remove('show');},2500);}
+var toastTimer=null;
+function showToast(msg,type){
+  var t=byId('toast');t.textContent=msg;
+  t.className='toast '+(type||'success');
+  t.classList.add('show');
+  if(toastTimer)clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){t.classList.remove('show');toastTimer=null;},2500);
+}
 function timeToMin(t){return parseInt(t.slice(0,2))*60+parseInt(t.slice(2));}
 function slotHours(slot){var p=slot.split('-'),s=timeToMin(p[0]),e=timeToMin(p[1]);if(e<=s)e+=1440;return(e-s)/60;}
 function fmtSlot(slot){var p=slot.split('-');return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
@@ -692,6 +704,8 @@ function getAvailable(dutyType,day,slot,tempRelease,slotsMap){
   });
 }
 function generateEmptySchedule(){
+  undoStack=[];
+  var btnU=byId('btnUndo');if(btnU)btnU.disabled=true;
   S.assignments={};S.thisWeekIds=new Set();S.holidays={};S.holidayBackup={};
   Object.keys(S.active).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
@@ -745,7 +759,7 @@ function fillRemainingSlots(){
   for(var t=0;t<targets.length;t++){
     if(fillCount>0&&fillCount%RESORT_INTERVAL===0){
       for(var rt=t;rt<targets.length;rt++){
-        var rtg=targets[rt],rdef=DUTY_DEFS[rtg.dtype];
+        var rtg=targets[rt];
         rtg.eligible=S.students.filter(function(s){
           return isEligible(s,rtg.dtype,rtg.day,rtg.slot,{lastWeek:lastWeek,slotsMap:assignedSlots});
         }).length;
@@ -869,6 +883,11 @@ function renderConfig(){
   });
 }
 function updateWeekDates(){
+  var startDate=new Date(getSemesterStart());
+  if(startDate.getDay()!==1){
+    $('weekDates').textContent='⚠ 學期起始日應為週一';
+    return;
+  }
   var raw=parseInt($('weekNum').value)||1;
   if(raw<1)raw=1;if(raw>20)raw=20;
   $('weekNum').value=raw;
@@ -969,8 +988,8 @@ function updateConfigSummary(){
   var availM=S.students.filter(function(s){return s.gender==='男'&&!lastWeek.has(s.id);}).length;
   var availF=S.students.filter(function(s){return s.gender==='女'&&!lastWeek.has(s.id);}).length;
   var bar=byId('configSummary');
-  if(totalSlots===0){bar.style.display='none';byId('btnSchedule').disabled=true;return;}
-  bar.style.display='flex';byId('btnSchedule').disabled=false;
+  if(totalSlots===0){bar.style.display='none';byId('btnSchedule').disabled=true;byId('btnSchedule').title='請先至少選擇一項勤務';return;}
+  bar.style.display='flex';byId('btnSchedule').disabled=false;byId('btnSchedule').title='';
   var ok=totalSlots<=(availM+availF)&&maleSlots<=availM;
   clearEl(bar);
   var items=[
@@ -1256,6 +1275,7 @@ function assignPerson(student){
   var arr=S.assignments[ctx.dtype][key],old=arr[ctx.idx];
   /* Push undo entry */
   undoStack.push({dtype:ctx.dtype,key:key,idx:ctx.idx,prev:old?{id:old.id,name:old.name}:undefined,tdEl:ctx.tdEl});
+  byId('btnUndo').disabled=false;
   if(old){
     var still=false;
     Object.keys(S.assignments).forEach(function(dt){Object.keys(S.assignments[dt]).forEach(function(k){
@@ -1301,7 +1321,7 @@ function updatePickerHighlight(){
   }
 }
 function undoLastAssign(){
-  if(undoStack.length===0){showToast('沒有可復原的操作');return;}
+  if(undoStack.length===0){showToast('沒有可復原的操作','warn');return;}
   var u=undoStack.pop();
   var arr=S.assignments[u.dtype]&&S.assignments[u.dtype][u.key];
   if(!arr)return;
@@ -1325,6 +1345,7 @@ function undoLastAssign(){
   }
   renderStatsBar();renderDashboard();
   showToast('已復原'+(u.prev?' → '+u.prev.name:''));
+  byId('btnUndo').disabled=undoStack.length===0;
 }
 
 /* ===== UI: Dashboard ===== */
@@ -1346,6 +1367,16 @@ function renderDashboard(){
   titleH3.appendChild(document.createTextNode(' 人'));
   dash.appendChild(titleH3);
   var chart=h('div',{className:'hours-chart'});
+  var FOLD_LIMIT=20;
+  var foldContainer=null;
+  if(assigned.length>FOLD_LIMIT){
+    foldContainer=document.createElement('details');
+    foldContainer.style.cssText='margin-top:4px';
+    var summary=document.createElement('summary');
+    summary.style.cssText='cursor:pointer;color:var(--gold);font-size:.88rem;padding:8px 0;user-select:none';
+    summary.textContent='展開剩餘 '+(assigned.length-FOLD_LIMIT)+' 人';
+    foldContainer.appendChild(summary);
+  }
   assigned.forEach(function(s,i){
     var hrs=weekHrs[s.id]||0,pct=Math.round(hrs/maxH*100);
     var ratio=hrs/maxH;
@@ -1359,9 +1390,11 @@ function renderDashboard(){
     bw.appendChild(bar);
     row.appendChild(bw);
     row.appendChild(h('span',{className:'hc-val'},hrs.toFixed(1)+'h'));
-    chart.appendChild(row);
+    if(foldContainer&&i>=FOLD_LIMIT){foldContainer.appendChild(row);}
+    else{chart.appendChild(row);}
     setTimeout(function(){bar.style.width=pct+'%';},50+i*8);
   });
+  if(foldContainer)chart.appendChild(foldContainer);
   dash.appendChild(chart);
 }
 
@@ -1684,19 +1717,19 @@ function exportExcel(){
 
     XLSX.utils.book_append_sheet(wb,ws,def.label.replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31));
   });
-  if(!wb.SheetNames.length){showToast('請先完成排勤再匯出');return;}
+  if(!wb.SheetNames.length){showToast('請先完成排勤再匯出','error');return;}
   var fname='勤務排班_第'+S.weekNum+'週.xlsx';
   try{
     var wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
     var blob=new Blob([wbout],{type:'application/octet-stream'});
     downloadBlob(blob,fname);
-  }catch(e){showToast('匯出失敗：'+e.message);}
+  }catch(e){showToast('匯出失敗：'+e.message,'error');}
 }
 
 /* ===== BACKUP / RESTORE ===== */
 function exportBackup(){
   var data=localStorage.getItem('dutySchedulerHistory');
-  if(!data||data==='{}'){showToast('沒有可備份的歷史紀錄');return;}
+  if(!data||data==='{}'){showToast('沒有可備份的歷史紀錄','warn');return;}
   var blob=new Blob([data],{type:'application/json'});
   var url=URL.createObjectURL(blob);
   var a=document.createElement('a');
@@ -1707,7 +1740,7 @@ function exportBackup(){
 }
 function importBackup(file){
   /* 檔案大小限制：防止匯入過大的備份檔 */
-  if(file.size>5*1024*1024){showToast('備份檔案過大（上限 5MB）');return;}
+  if(file.size>5*1024*1024){showToast('備份檔案過大（上限 5MB）','error');return;}
   var reader=new FileReader();
   reader.onload=function(e){
     try{
@@ -1716,16 +1749,18 @@ function importBackup(file){
       if(!data.history&&!data.cumHours)throw new Error('找不到歷史紀錄資料');
       localStorage.setItem('dutySchedulerHistory',JSON.stringify(data));
       S.history=data.history||{};S.cumHours=data.cumHours||{};
+      if(data.assignments)S.assignments=data.assignments;
+      if(data.holidays){S.holidays={};Object.keys(data.holidays).forEach(function(k){if(Array.isArray(data.holidays[k]))S.holidays[k]=new Set(data.holidays[k]);});}
       S.savedWeeks=new Set();Object.keys(S.history).forEach(function(k){S.savedWeeks.add(parseInt(k));});
       showToast('歷史備份已匯入（'+Object.keys(S.history).length+' 週）');
-    }catch(err){showToast('匯入失敗：'+err.message);}
+    }catch(err){showToast('匯入失敗：'+err.message,'error');}
   };
   reader.readAsText(file);
 }
 
 /* ===== PERSISTENCE ===== */
 function saveWeek(){
-  if(S.history[S.weekNum]||S.savedWeeks.has(S.weekNum)){showToast('第 '+S.weekNum+' 週已儲存過，請勿重複儲存');return;}
+  if(S.history[S.weekNum]||S.savedWeeks.has(S.weekNum)){showToast('第 '+S.weekNum+' 週已儲存過，請勿重複儲存','warn');return;}
   var weekHrs={};
   Object.keys(S.assignments).forEach(function(dtype){
     Object.keys(S.assignments[dtype]).forEach(function(key){
@@ -1737,19 +1772,19 @@ function saveWeek(){
   S.history[S.weekNum]={ids:Array.from(S.thisWeekIds)};
   S.savedWeeks.add(S.weekNum);
   var hSer={};Object.keys(S.holidays).forEach(function(k){if(S.holidays[k]&&S.holidays[k].size)hSer[k]=Array.from(S.holidays[k]);});
-  try{localStorage.setItem('dutySchedulerHistory',JSON.stringify({history:S.history,cumHours:S.cumHours,assignments:S.assignments,holidays:hSer}));}catch(e){showToast('儲存失敗：儲存空間不足');return;}
+  try{localStorage.setItem('dutySchedulerHistory',JSON.stringify({history:S.history,cumHours:S.cumHours,assignments:S.assignments,holidays:hSer}));}catch(e){showToast('儲存失敗：儲存空間不足','error');return;}
   showToast('第 '+S.weekNum+' 週紀錄已儲存（'+S.thisWeekIds.size+' 人）');
 }
 
 /* ===== INIT ===== */
 function handleFile(file){
   /* 驗證檔案大小（上限 10MB） */
-  if(file.size>10*1024*1024){showToast('檔案過大（上限 10MB）');return;}
+  if(file.size>10*1024*1024){showToast('檔案過大（上限 10MB）','error');return;}
   /* 驗證 Excel 檔案副檔名 */
   var validTypes=['.xlsx','.xls','.xlsm','.xlsb','.ods'];
   var ext=file.name.toLowerCase().match(/\.[^.]+$/);
   if(!ext||validTypes.indexOf(ext[0])<0){
-    showToast('不支援的檔案格式，請選擇 Excel 檔案（.xlsx）');return;
+    showToast('不支援的檔案格式，請選擇 Excel 檔案（.xlsx）','error');return;
   }
   var reader=new FileReader();
   reader.onload=function(e){
@@ -1896,7 +1931,7 @@ function init(){
   fi.addEventListener('change',function(){if(fi.files[0])handleFile(fi.files[0]);fi.value='';});
   $('btnSchedule').addEventListener('click',function(){
     /* 防止未匯入學員就排勤 */
-    if(S.students.length===0){showToast('請先匯入學員名冊');return;}
+    if(S.students.length===0){showToast('請先匯入學員名冊','error');return;}
     var btn=$('btnSchedule');
     btn.disabled=true;
     var spinner=h('span',{className:'spinner'});
@@ -1911,7 +1946,7 @@ function init(){
     },300);
   });
   $('btnFillEmpty').addEventListener('click',function(){
-    if(!S.assignments||Object.keys(S.assignments).length===0){showToast('請先產生勤務表');return;}
+    if(!S.assignments||Object.keys(S.assignments).length===0){showToast('請先產生勤務表','error');return;}
     var btn=$('btnFillEmpty');
     btn.disabled=true;
     var spinner=h('span',{className:'spinner'});
@@ -1921,7 +1956,7 @@ function init(){
       btn.removeChild(spinner);
       btn.disabled=false;
       var emptyMsg=S.emptySlotCount>0?'（仍有 '+S.emptySlotCount+' 格無法填入，請手動處理）':'';
-      showToast('已隨機填滿所有空格'+emptyMsg);
+      showToast('已隨機填滿所有空格'+emptyMsg,S.emptySlotCount>0?'warn':undefined);
     },300);
   });
   $('btnReimport').addEventListener('click',function(){if(Object.keys(S.assignments).length>0){if(!confirm('確定要重新匯入？未儲存的排班資料將遺失。'))return;}showStep(['stepImport']);});
@@ -1945,7 +1980,7 @@ function init(){
         showToast('上週排班表已載入（'+ids.length+' 人）');
       }catch(err){
         $('lastWeekStatus').textContent='載入失敗：'+err.message;
-        showToast('載入失敗：'+err.message);
+        showToast('載入失敗：'+err.message,'error');
       }
       $('lastWeekFile').value='';
     };
@@ -1957,6 +1992,7 @@ function init(){
     }
   });
   $('semesterStart').addEventListener('change',updateWeekDates);
+  $('btnUndo').addEventListener('click',function(){undoLastAssign();});
   $('btnExport').addEventListener('click',exportExcel);
   $('btnSave').addEventListener('click',saveWeek);
   $('btnBackupExport').addEventListener('click',exportBackup);
@@ -2023,7 +2059,7 @@ function init(){
   if(location.search.indexOf('test')>=0){
     setTimeout(function(){
       var r=runSelfTests();
-      showToast('自測：'+r.passed+' 通過 / '+r.failed+' 失敗');
+      showToast('自測：'+r.passed+' 通過 / '+r.failed+' 失敗',r.failed>0?'error':'info');
     },500);
   }
 }
