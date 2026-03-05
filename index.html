@@ -669,6 +669,7 @@ function fillRemainingSlots(){
           if(S.thisWeekIds.has(s.id))return false;
           if(lastWeek.has(s.id))return false;
           if(!isStudentFree(s.dept,rtg.day,rtg.slot))return false;
+          if(slotsOverlap(assignedSlots.get(s.id),rtg.day,rtg.slot))return false;
           return true;
         }).length;
       }
