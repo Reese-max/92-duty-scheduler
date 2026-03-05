@@ -337,7 +337,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 <body>
 <header>
   <h1>92期1隊 半自動勤排系統<em>114-2</em></h1>
-  <span class="ver">v2.3</span>
+  <span class="ver">v2.4</span>
 </header>
 <main>
   <section id="stepImport" class="step active">
@@ -462,6 +462,22 @@ var DUTY_DEFS={
   '監廚':{label:'監廚',maleOnly:true,slots:['0900-1000','1000-1100','1500-1600','1600-1700'],defDays:['一','二','三','四','五'],defPP:1},
   '總隊值星':{label:'總隊值星',maleOnly:true,slots:['0000-0200','0200-0400','0400-0600','0600-0800','0800-1000','1000-1200','1200-1350','1350-1550','1550-1800','1800-2000','2000-2200','2200-0000'],defDays:['日','一','二','三','四','五'],defPP:1}
 };
+
+/* ===== EXPORT CONFIG（匯出設定常數） ===== */
+var EXPORT_FONT='DFKai-SB';
+var EXPORT_FONT_SIZES={'值班':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:28},'夜巡':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'週間':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'校巡':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16,holiday:16},'寢巡':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'警技館':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'監廚':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20,holiday:28},'總隊值星':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20,holiday:25}};
+var EXPORT_COL_WIDTHS={'值班':{time:9,id:7,name:20},'夜巡':{time:11,id:7,name:14},'週間':{time:11,id:7,name:14},'校巡':{time:13,id:7,name:11},'寢巡':{time:11,id:7,name:14},'警技館':{time:11,id:7,name:14},'監廚':{time:19,id:8,name:12},'總隊值星':{time:9,id:7,name:24}};
+var EXPORT_HDR_HEIGHTS={'夜巡':{date:28,day:49},'校巡':{date:29,day:22},'總隊值星':{date:29,day:48}};
+var EXPORT_NOTE_HEIGHTS={'值班':[30,49.5,39.75,30,51],'夜巡':[39.75,39.75,39.75,30,69.75],'週間':[39.75,39.75,39.75,30,39.75],'校巡':[37,37,37,37,37],'寢巡':[30,49.5,39.75,30,39.75],'警技館':[30,49.5,39.75,30,39.75],'監廚':[39.75,39.75,39.75,30,39.75],'總隊值星':[42,42,42,42,42]};
+var EXPORT_TIME_FONT={'寢巡':'標楷體-繁','警技館':'標楷體-繁'};
+var EXPORT_SLOT_FMT={'值班':'raw','監廚':'raw','總隊值星':'raw','校巡':'raw','夜巡':'fullwidth','寢巡':'fullwidth','警技館':'fullwidth','週間':'fullwidth'};
+var EXPORT_HORIZ={'校巡':true};
+var EXPORT_TITLE_MAP={'值班':'隊部值班表','夜巡':'友誼、警英夜巡勤務表','週間':'週間校巡勤務表','校巡':'總隊值星假日校園巡邏勤務表','寢巡':' 寢巡勤務表','警技館':' 警技館值班勤務表','監廚':'監廚勤務表','總隊值星':' 總隊值星週隊部值班表'};
+var EXPORT_SHEET_ORDER=['值班','夜巡','週間','校巡','寢巡','警技館','監廚','總隊值星'];
+var EXPORT_DAY_ORDER={'校巡':['五','六','日'],'警技館':['五','一','二','三','四']};
+var EXPORT_SLOT_ORDER={'夜巡':['0100-0300','0300-0500','2300-0100']};
+var EXPORT_MIN_COLS={'寢巡':11};
+var EXPORT_NOTE_TEXT='備註：\n1、輪值勤務，請同學務必提早5-10分鐘到勤。\n2、請同學互相提醒值勤時間。\n3、如有疑問(如衝堂、因故無法值班等)，請向勤務排表員921127江睿承(B218)、921165謝顥譯(B218)反映。\n4、本表公布後，請同學於自己名字下方簽名(押時間)確認，如需更改，請報由區隊長核章修正，若逾時未簽名者，將依規定記點處分。';
 
 /* ===== STATE ===== */
 var S={students:[],freePeriods:{},weekNum:1,active:{},assignments:{},thisWeekIds:new Set(),history:{},cumHours:{},holidays:{},holidayBackup:{},workbook:null,savedWeeks:new Set()};
@@ -1064,6 +1080,8 @@ function refreshPickerList(){
 }
 function renderPickerList(candidates,current,showAll){
   var list=$('pickerList');clearEl(list);
+  list.setAttribute('role','listbox');
+  list.setAttribute('aria-label','可選人員清單');
   var clearRow=$('pickerClearRow');clearEl(clearRow);
   if(current){
     clearRow.style.display='block';
@@ -1082,7 +1100,7 @@ function renderPickerList(candidates,current,showAll){
   }
   candidates.forEach(function(s){
     var forced=showAll&&s.reasons&&s.reasons.length>0;
-    var item=h('div',{className:'pk-item'+(forced?' forced':'')});
+    var item=h('div',{className:'pk-item'+(forced?' forced':''),role:'option','aria-selected':'false'});
     item.setAttribute('tabindex','0'); /* 鍵盤導航：允許 pk-item 被聚焦 */
     item.appendChild(h('span',{className:'pk-id'},String(s.id)));
     var nameSpan=h('span',{className:'pk-name'},s.name);
@@ -1496,53 +1514,29 @@ function applySheetStyles(ws,range,styles,noteR,holidayCells,holidayAnchors,DATA
 
 function exportExcel(){
   var wb=XLSX.utils.book_new();
-  var FN='DFKai-SB';
+  var FN=EXPORT_FONT;
   /* 邊框預設：粗邊=外框/日期分隔（2pt 對應 ODS），細邊=學號姓名分隔 */
   var bM={style:'medium',color:{rgb:'000000'}},bT={style:'thin',color:{rgb:'000000'}};
   /* 空白格灰色填充 */
   var grayFill={patternType:'solid',fgColor:{rgb:'D8D8D8'}};
-  /* 各工作表字型大小設定 */
-  var FONT_SIZES={'值班':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:28},'夜巡':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'週間':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'校巡':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16,holiday:16},'寢巡':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'警技館':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'監廚':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20,holiday:28},'總隊值星':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20,holiday:25}};
-  /* 各勤務類型欄寬（對應 ODS） */
-  var COL_WIDTHS={'值班':{time:9,id:7,name:20},'夜巡':{time:11,id:7,name:14},'週間':{time:11,id:7,name:14},'校巡':{time:13,id:7,name:11},'寢巡':{time:11,id:7,name:14},'警技館':{time:11,id:7,name:14},'監廚':{time:19,id:8,name:12},'總隊值星':{time:9,id:7,name:24}};
-  /* 標頭列高（對應 ODS） */
-  var HDR_HEIGHTS={'夜巡':{date:28,day:49},'校巡':{date:29,day:22},'總隊值星':{date:29,day:48}};
-  /* 備註區段列高（5 列，對應 ODS） */
-  var NOTE_HEIGHTS={'值班':[30,49.5,39.75,30,51],'夜巡':[39.75,39.75,39.75,30,69.75],'週間':[39.75,39.75,39.75,30,39.75],'校巡':[37,37,37,37,37],'寢巡':[30,49.5,39.75,30,39.75],'警技館':[30,49.5,39.75,30,39.75],'監廚':[39.75,39.75,39.75,30,39.75],'總隊值星':[42,42,42,42,42]};
-  /* 時段欄字型覆寫 */
-  var TIME_FONT={'寢巡':'標楷體-繁','警技館':'標楷體-繁'};
-  /* 時段格式：raw=無冒號, fullwidth=全形冒號+換行, halfwidth=預設 */
-  var SLOT_FMT={'值班':'raw','監廚':'raw','總隊值星':'raw','校巡':'raw','夜巡':'fullwidth','寢巡':'fullwidth','警技館':'fullwidth','週間':'fullwidth'};
-  var noteText='備註：\n1、輪值勤務，請同學務必提早5-10分鐘到勤。\n2、請同學互相提醒值勤時間。\n3、如有疑問(如衝堂、因故無法值班等)，請向勤務排表員921127江睿承(B218)、921165謝顥譯(B218)反映。\n4、本表公布後，請同學於自己名字下方簽名(押時間)確認，如需更改，請報由區隊長核章修正，若逾時未簽名者，將依規定記點處分。';
-  /* 水平排列勤務（校巡：人員並排） */
-  var HORIZ={'校巡':true};
-  var TITLE_MAP={'值班':'隊部值班表','夜巡':'友誼、警英夜巡勤務表','週間':'週間校巡勤務表','校巡':'總隊值星假日校園巡邏勤務表','寢巡':' 寢巡勤務表','警技館':' 警技館值班勤務表','監廚':'監廚勤務表','總隊值星':' 總隊值星週隊部值班表'};
 
-  /* 工作表順序（對應 ODS） */
-  var SHEET_ORDER=['值班','夜巡','週間','校巡','寢巡','警技館','監廚','總隊值星'];
-  SHEET_ORDER.filter(function(dt){return S.active[dt];}).forEach(function(dtype){
+  EXPORT_SHEET_ORDER.filter(function(dt){return S.active[dt];}).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
-    var days=cfg.days,pp=cfg.pp,horiz=!!HORIZ[dtype];
-    /* 覆寫匯出星期順序 */
-    var EXPORT_DAY_ORDER={'校巡':['五','六','日'],'警技館':['五','一','二','三','四']};
+    var days=cfg.days,pp=cfg.pp,horiz=!!EXPORT_HORIZ[dtype];
     var exportOrder=EXPORT_DAY_ORDER[dtype];
     if(exportOrder){days=exportOrder.filter(function(d){return cfg.days.indexOf(d)>=0;});}
-    /* 覆寫匯出時段順序 */
-    var EXPORT_SLOT_ORDER={'夜巡':['0100-0300','0300-0500','2300-0100']};
     var exportSlots=EXPORT_SLOT_ORDER[dtype]||def.slots;
     var colsPerDay=horiz?pp*2:2;
     var rowsPerSlot=horiz?2:pp*2;
     var totalCols=1+days.length*colsPerDay;
-    /* 最小欄數（寢巡需 11 欄對應 ODS） */
-    var MIN_COLS={'寢巡':11};
-    var minC=MIN_COLS[dtype];
+    var minC=EXPORT_MIN_COLS[dtype];
     if(minC&&totalCols<minC)totalCols=minC;
 
     /* 建立樣式 */
-    var fs=FONT_SIZES[dtype]||{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20};
-    var timeFN=TIME_FONT[dtype]||FN;
-    var slotFmt=SLOT_FMT[dtype]||'halfwidth';
-    var hh=HDR_HEIGHTS[dtype]||{date:28,day:34};
+    var fs=EXPORT_FONT_SIZES[dtype]||{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20};
+    var timeFN=EXPORT_TIME_FONT[dtype]||FN;
+    var slotFmt=EXPORT_SLOT_FMT[dtype]||'halfwidth';
+    var hh=EXPORT_HDR_HEIGHTS[dtype]||{date:28,day:34};
     var styles=buildExportStyles(fs,FN,timeFN,bM,bT,grayFill);
 
     /* 建立放假時段對照表 */
@@ -1551,7 +1545,7 @@ function exportExcel(){
     for(var di=0;di<days.length;di++){for(var esi=0;esi<exportSlots.length;esi++){if(holidaySet.has(days[di]+'|'+exportSlots[esi])){if(!holidaySlotMap[di])holidaySlotMap[di]={};holidaySlotMap[di][esi]=true;}}}
 
     /* 建立標頭列（標題、日期、星期） */
-    var titleLabel=TITLE_MAP[dtype]||def.label;
+    var titleLabel=EXPORT_TITLE_MAP[dtype]||def.label;
     var hdr=buildSheetHeader(dtype,days,colsPerDay,totalCols,hh,titleLabel);
 
     /* 建立資料列（時段指派） */
@@ -1568,7 +1562,7 @@ function exportExcel(){
     merges=merges.concat(hm.merges);
 
     /* 寢巡：合併空白區域（欄 3~10） */
-    if(MIN_COLS[dtype]&&totalCols>1+days.length*colsPerDay){
+    if(EXPORT_MIN_COLS[dtype]&&totalCols>1+days.length*colsPerDay){
       var blankStart=1+days.length*colsPerDay;
       var blankEnd=totalCols-1;
       merges.push({s:{r:1,c:blankStart},e:{r:1,c:blankEnd}});
@@ -1577,8 +1571,8 @@ function exportExcel(){
     }
 
     /* 備註列 */
-    var nh=NOTE_HEIGHTS[dtype]||[36,36,36,36,36];
-    var noteRow=new Array(totalCols).fill('');noteRow[0]=noteText;
+    var nh=EXPORT_NOTE_HEIGHTS[dtype]||[36,36,36,36,36];
+    var noteRow=new Array(totalCols).fill('');noteRow[0]=EXPORT_NOTE_TEXT;
     aoa.push(noteRow);merges.push({s:{r:noteR,c:0},e:{r:noteR+4,c:totalCols-1}});
     rh.push({hpt:nh[0]});
     for(var n=1;n<5;n++){aoa.push(new Array(totalCols).fill(''));rh.push({hpt:nh[n]});}
@@ -1592,7 +1586,7 @@ function exportExcel(){
     applySheetStyles(ws,range,styles,noteR,hm.holidayCells,hm.holidayAnchors,3);
 
     /* 欄寬（對應 ODS） */
-    var cwDef=COL_WIDTHS[dtype]||{time:11,id:7,name:14};
+    var cwDef=EXPORT_COL_WIDTHS[dtype]||{time:11,id:7,name:14};
     var cw=[{wch:cwDef.time}];
     for(var i=0;i<days.length;i++){
       if(horiz){for(var p=0;p<pp;p++)cw.push({wch:cwDef.id},{wch:cwDef.name});}
@@ -1665,6 +1659,8 @@ function saveWeek(){
 
 /* ===== INIT ===== */
 function handleFile(file){
+  /* 驗證檔案大小（上限 10MB） */
+  if(file.size>10*1024*1024){showToast('檔案過大（上限 10MB）');return;}
   /* 驗證 Excel 檔案副檔名 */
   var validTypes=['.xlsx','.xls','.xlsm','.xlsb','.ods'];
   var ext=file.name.toLowerCase().match(/\.[^.]+$/);
@@ -1769,6 +1765,24 @@ function runSelfTests(){
   /* --- getDeptShort --- */
   assert('getDeptShort: 行政系', getDeptShort('行政系'), '行政系');
   assert('getDeptShort: 犯防系預防組', getDeptShort('犯防系預防組'), '犯預');
+
+  /* --- isStudentFree（週末應為空堂） --- */
+  assertTruthy('isStudentFree: 週六視為空堂', isStudentFree('行政系','六','0800-1000'));
+  assertTruthy('isStudentFree: 週日視為空堂', isStudentFree('行政系','日','0800-1000'));
+  assertTruthy('isStudentFree: 夜間（18點後）視為空堂', isStudentFree('行政系','一','1800-2000'));
+  assertTruthy('isStudentFree: 凌晨（6點前）視為空堂', isStudentFree('行政系','一','0300-0500'));
+
+  /* --- isEligible（模擬測試，需暫存狀態） --- */
+  var origStudents=S.students,origThisWeek=S.thisWeekIds,origHistory=S.history,origWeekNum=S.weekNum,origAssignments=S.assignments;
+  S.students=[{id:1,name:'測試甲',gender:'男',dept:'行政系',note:''},{id:2,name:'測試乙',gender:'女',dept:'行政系',note:''},{id:3,name:'測試丙(退學)',gender:'男',dept:'行政系',note:''}];
+  S.thisWeekIds=new Set();S.history={};S.weekNum=2;S.assignments={};
+  assertTruthy('isEligible: 正常男學員應合格', isEligible(S.students[0],'值班','一','0800-1000',{lastWeek:new Set()}));
+  assertFalsy('isEligible: 女學員不得排僅男勤務', isEligible(S.students[1],'值班','一','0800-1000',{lastWeek:new Set()}));
+  assertFalsy('isEligible: 退學學員不得排班', isEligible(S.students[2],'值班','一','0800-1000',{lastWeek:new Set()}));
+  S.thisWeekIds.add(1);
+  assertFalsy('isEligible: 本週已排學員不得重複', isEligible(S.students[0],'值班','一','1000-1200',{lastWeek:new Set()}));
+  assertFalsy('isEligible: 上週已排學員不得排班', isEligible(S.students[1],'校巡','六','0800-1000',{lastWeek:new Set([2])}));
+  S.students=origStudents;S.thisWeekIds=origThisWeek;S.history=origHistory;S.weekNum=origWeekNum;S.assignments=origAssignments;
 
   /* --- 結果摘要 --- */
   var summary='自測結果：'+passed+' 通過 / '+failed+' 失敗（共 '+(passed+failed)+' 項）';
