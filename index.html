@@ -658,9 +658,9 @@ function isEligible(s,dutyType,day,slot,opts){
   if(slotsOverlap(aSlots,day,slot))return false;
   return true;
 }
-function getAvailable(dutyType,day,slot,tempRelease){
+function getAvailable(dutyType,day,slot,tempRelease,slotsMap){
   return S.students.filter(function(s){
-    return isEligible(s,dutyType,day,slot,{tempRelease:tempRelease});
+    return isEligible(s,dutyType,day,slot,{tempRelease:tempRelease,slotsMap:slotsMap});
   });
 }
 function generateEmptySchedule(){
@@ -970,7 +970,7 @@ function buildDutyTable(dtype){
 
 /* ===== UI: Picker ===== */
 var pickerCtx=null,pickerState={};
-function getAllStudentsForPicker(dtype,day,slot,slotIds,current){
+function getAllStudentsForPicker(dtype,day,slot,slotIds,current,slotsMap){
   var def=DUTY_DEFS[dtype],lastWeek=getLastWeekIds();
   var tempRelease=new Set();if(current)tempRelease.add(current.id);
   return S.students.filter(function(s){
@@ -984,7 +984,8 @@ function getAllStudentsForPicker(dtype,day,slot,slotIds,current){
     if(S.thisWeekIds.has(s.id)&&!(tempRelease&&tempRelease.has(s.id)))reasons.push('thisWeek');
     if(lastWeek.has(s.id))reasons.push('lastWeek');
     if(!isStudentFree(s.dept,day,slot))reasons.push('busy');
-    var aSlots=getAssignedSlots(s.id);
+    /* 使用預建的 slotsMap 取代逐人呼叫 getAssignedSlots（效能優化） */
+    var aSlots=slotsMap?slotsMap.get(s.id)||[]:getAssignedSlots(s.id);
     if(tempRelease&&tempRelease.has(s.id)){aSlots=aSlots.filter(function(sl){return sl.day!==day||sl.slot!==slot;});}
     if(slotsOverlap(aSlots,day,slot))reasons.push('conflict');
     return{id:s.id,name:s.name,dept:s.dept,gender:s.gender,reasons:reasons};
@@ -998,9 +999,22 @@ function openPicker(dtype,day,slot,idx,tdEl){
   byId('pickerTitle').textContent=def.label+' | '+weekDate(S.weekNum,day)+'('+day+') '+fmtSlot(slot);
   var slotIds=new Set();arr.forEach(function(p,i){if(p&&i!==idx)slotIds.add(p.id);});
   var tempRelease=new Set();if(current)tempRelease.add(current.id);
-  var candidates=getAvailable(dtype,day,slot,tempRelease).filter(function(s){return!slotIds.has(s.id);});
+  /* 預建 assignedSlotsMap：一次遍歷所有指派，避免逐人呼叫 getAssignedSlots（效能優化） */
+  var assignedSlotsMap=new Map();
+  Object.keys(S.assignments).forEach(function(dt){
+    Object.keys(S.assignments[dt]).forEach(function(k){
+      var parts=k.split('|'),d=parts[0],sl=parts[1];
+      S.assignments[dt][k].forEach(function(p){
+        if(p&&p.id){
+          if(!assignedSlotsMap.has(p.id))assignedSlotsMap.set(p.id,[]);
+          assignedSlotsMap.get(p.id).push({day:d,slot:sl});
+        }
+      });
+    });
+  });
+  var candidates=getAvailable(dtype,day,slot,tempRelease,assignedSlotsMap).filter(function(s){return!slotIds.has(s.id);});
   candidates.sort(function(a,b){return(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);});
-  var allStudents=getAllStudentsForPicker(dtype,day,slot,slotIds,current);
+  var allStudents=getAllStudentsForPicker(dtype,day,slot,slotIds,current,assignedSlotsMap);
   allStudents.sort(function(a,b){return(a.reasons.length-b.reasons.length)||(S.cumHours[a.id]||0)-(S.cumHours[b.id]||0);});
   var autoShowAll=candidates.length===0;
   var cb=byId('pickerShowAll');
@@ -1008,7 +1022,7 @@ function openPicker(dtype,day,slot,idx,tdEl){
   var toggle=byId('pickerToggle');
   toggle.classList.toggle('auto',autoShowAll);
   byId('pickerToggleLabel').textContent=autoShowAll?'已自動開啟：無符合條件人員，顯示全部學員':'顯示全部學員（忽略限制）';
-  pickerState={candidates:candidates,allStudents:allStudents,current:current,showAll:autoShowAll};
+  pickerState={candidates:candidates,allStudents:allStudents,current:current,showAll:autoShowAll,slotsMap:assignedSlotsMap};
   /* Holiday button (per-slot) */
   var hRow=$('pickerHolidayRow');clearEl(hRow);
   var hkey=day+'|'+slot;
