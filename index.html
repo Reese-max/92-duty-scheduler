@@ -1271,162 +1271,284 @@ function blobAnchorDownload(blob,fname){
   setTimeout(function(){document.body.removeChild(a);URL.revokeObjectURL(url);},500);
   showToast('Excel 已下載');
 }
-function exportExcel(){
-  var wb=XLSX.utils.book_new();
-  var FN='DFKai-SB';
-  /* Border presets: medium=outer/day-separator (2pt matching ODS), thin=id-name-separator */
-  var bM={style:'medium',color:{rgb:'000000'}},bT={style:'thin',color:{rgb:'000000'}};
+/**
+ * 格式化時段字串（匯出用）
+ * @param {string} slot - 時段字串，如 '0100-0300'
+ * @param {string} fmt - 格式：'raw'=原始, 'fullwidth'=全形冒號+換行, 'halfwidth'=半形冒號
+ * @returns {string} 格式化後的時段字串
+ */
+function fmtSlotEx(slot,fmt){var p=slot.split('-');if(fmt==='raw')return p[0]+'-'+p[1];if(fmt==='fullwidth')return p[0].slice(0,2)+'：'+p[0].slice(2)+'-\n'+p[1].slice(0,2)+'：'+p[1].slice(2);return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
+
+/**
+ * 建立匯出用的所有儲存格樣式物件
+ * @param {Object} fs - 字型大小設定（含 title, hdrLabel, dateVal, dayVal, time, data, note, holiday）
+ * @param {string} FN - 主要字型名稱
+ * @param {string} timeFN - 時段欄位字型名稱
+ * @param {Object} bM - 粗邊框設定
+ * @param {Object} bT - 細邊框設定
+ * @param {Object} grayFill - 灰色填充樣式
+ * @returns {Object} 包含所有樣式物件的集合
+ */
+function buildExportStyles(fs,FN,timeFN,bM,bT,grayFill){
   var bdrAll={top:bM,bottom:bM,left:bM,right:bM};
   var bdrId={top:bM,bottom:bM,left:bM,right:bT};
   var bdrName={top:bM,bottom:bM,left:bT,right:bM};
-  /* Gray fill for empty (unfilled) cells */
+  return{
+    sTitle:{font:{sz:fs.title,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}},
+    sHdrLabel:{font:{sz:fs.hdrLabel,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}},
+    sDateVal:{font:{sz:fs.dateVal,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}},
+    sDayVal:{font:{sz:fs.dayVal,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}},
+    sTime:{font:{sz:fs.time,name:timeFN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}},
+    sNote:{font:{sz:fs.note,name:FN},alignment:{horizontal:'left',vertical:'top',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}},
+    sId:{font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrId,fill:{patternType:'solid',fgColor:{rgb:'D8D8D8'}}},
+    sName:{font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}},
+    sSig:{font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}},
+    sNameEmpty:{font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName,fill:grayFill},
+    sSigEmpty:{font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill},
+    sHoliday:{font:{sz:fs.holiday||fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill}
+  };
+}
+
+/**
+ * 建立工作表標頭列（標題、日期、星期，共 3 列）
+ * @param {string} dtype - 勤務類型
+ * @param {Array} days - 星期陣列
+ * @param {number} colsPerDay - 每天佔用的欄數
+ * @param {number} totalCols - 總欄數
+ * @param {Object} hh - 標頭列高設定 {date, day}
+ * @param {string} titleLabel - 表格標題文字（如 '隊部值班表'）
+ * @returns {Object} {aoa: 列資料陣列, merges: 合併範圍陣列, rh: 列高陣列}
+ */
+function buildSheetHeader(dtype,days,colsPerDay,totalCols,hh,titleLabel){
+  var aoa=[],merges=[],rh=[];
+  /* 第 0 列：標題 */
+  var title='中央警察大學 92期1隊  114學年度第2學期'+titleLabel+'  (第'+S.weekNum+'週)';
+  var titleRow=new Array(totalCols).fill('');titleRow[0]=title;
+  aoa.push(titleRow);merges.push({s:{r:0,c:0},e:{r:0,c:totalCols-1}});
+  rh.push({hpt:33});
+  /* 第 1 列：日期 */
+  var dateRow=new Array(totalCols).fill('');dateRow[0]='日期';
+  for(var i=0;i<days.length;i++){var dc=1+i*colsPerDay;dateRow[dc]=weekDate(S.weekNum,days[i]);merges.push({s:{r:1,c:dc},e:{r:1,c:dc+colsPerDay-1}});}
+  aoa.push(dateRow);rh.push({hpt:hh.date});
+  /* 第 2 列：星期 */
+  var dayRow=new Array(totalCols).fill('');dayRow[0]='星期';
+  for(var i=0;i<days.length;i++){var dc=1+i*colsPerDay;dayRow[dc]=days[i];merges.push({s:{r:2,c:dc},e:{r:2,c:dc+colsPerDay-1}});}
+  aoa.push(dayRow);rh.push({hpt:hh.day});
+  return{aoa:aoa,merges:merges,rh:rh};
+}
+
+/**
+ * 建立工作表資料列（各時段指派人員）
+ * @param {string} dtype - 勤務類型
+ * @param {Array} days - 星期陣列
+ * @param {number} pp - 每時段人數
+ * @param {boolean} horiz - 是否為水平排列
+ * @param {number} colsPerDay - 每天佔用的欄數
+ * @param {Array} exportSlots - 匯出用的時段陣列
+ * @param {string} slotFmt - 時段格式化方式
+ * @param {Object} holidaySlotMap - 放假時段對照表
+ * @param {number} totalCols - 總欄數
+ * @param {number} rowsPerSlot - 每時段佔用的列數
+ * @returns {Object} {aoa: 列資料陣列, merges: 合併範圍陣列, rh: 列高陣列, endRow: 結束列號}
+ */
+function buildSheetData(dtype,days,pp,horiz,colsPerDay,exportSlots,slotFmt,holidaySlotMap,totalCols,rowsPerSlot){
+  var aoa=[],merges=[],rh=[];
+  var r=3;
+  exportSlots.forEach(function(slot,exportSlotIdx){
+    if(horiz){
+      /* 水平排列：每時段 2 列（姓名+簽名），人員並排 */
+      var nameRow=new Array(totalCols).fill('');
+      var sigRow=new Array(totalCols).fill('');
+      nameRow[0]=fmtSlotEx(slot,slotFmt);
+      for(var i=0;i<days.length;i++){
+        var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
+        for(var p=0;p<pp;p++){
+          var dc=1+i*colsPerDay+p*2;
+          if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
+        }
+        /* 合併簽名格（跳過放假時段） */
+        if(!(holidaySlotMap[i]&&holidaySlotMap[i][exportSlotIdx])){for(var p=0;p<pp;p++){
+          var dc=1+i*colsPerDay+p*2;
+          merges.push({s:{r:r+1,c:dc},e:{r:r+1,c:dc+1}});
+        }}
+      }
+      aoa.push(nameRow);aoa.push(sigRow);
+      merges.push({s:{r:r,c:0},e:{r:r+1,c:0}});
+      rh.push({hpt:45});rh.push({hpt:60});
+      r+=2;
+    }else{
+      /* 垂直排列：每時段 pp*2 列，每人佔姓名列+簽名列 */
+      for(var p=0;p<pp;p++){
+        var nameRow=new Array(totalCols).fill('');
+        var sigRow=new Array(totalCols).fill('');
+        if(p===0)nameRow[0]=fmtSlotEx(slot,slotFmt);
+        for(var i=0;i<days.length;i++){
+          var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
+          var dc=1+i*2;
+          if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
+          /* 合併簽名列（跳過放假時段） */
+          if(!(holidaySlotMap[i]&&holidaySlotMap[i][exportSlotIdx]))merges.push({s:{r:r+p*2+1,c:dc},e:{r:r+p*2+1,c:dc+1}});
+        }
+        aoa.push(nameRow);aoa.push(sigRow);
+        rh.push({hpt:45});rh.push({hpt:60});
+      }
+      /* 合併時段欄跨所有列 */
+      if(rowsPerSlot>1)merges.push({s:{r:r,c:0},e:{r:r+rowsPerSlot-1,c:0}});
+      r+=rowsPerSlot;
+    }
+  });
+  return{aoa:aoa,merges:merges,rh:rh,endRow:r};
+}
+
+/**
+ * 建立放假區域的合併範圍，並追蹤放假儲存格位置
+ * @param {Object} holidaySlotMap - 放假時段對照表
+ * @param {Array} days - 星期陣列
+ * @param {boolean} horiz - 是否為水平排列
+ * @param {number} colsPerDay - 每天佔用的欄數
+ * @param {number} pp - 每時段人數
+ * @returns {Object} {merges: 合併範圍陣列, holidayCells: 放假儲存格座標集合, holidayAnchors: 放假錨點陣列}
+ */
+function buildHolidayMerges(holidaySlotMap,days,horiz,colsPerDay,pp){
+  var merges=[];
+  var holidayCells=new Set();
+  var holidayAnchors=[];
+  Object.keys(holidaySlotMap).forEach(function(diStr){
+    var di=parseInt(diStr);
+    var dc=1+di*(horiz?colsPerDay:2),endC=dc+(horiz?colsPerDay:2)-1;
+    var sis=Object.keys(holidaySlotMap[di]).map(Number).sort(function(a,b){return a-b;});
+    var gs=[],gs0=sis[0],gs1=sis[0];
+    for(var k=1;k<sis.length;k++){if(sis[k]===gs1+1)gs1=sis[k];else{gs.push([gs0,gs1]);gs0=gs1=sis[k];}}
+    gs.push([gs0,gs1]);
+    gs.forEach(function(g){
+      var sr=horiz?(3+g[0]*2):(3+g[0]*pp*2);
+      var er=horiz?(3+g[1]*2+1):(3+g[1]*pp*2+pp*2-1);
+      merges.push({s:{r:sr,c:dc},e:{r:er,c:endC}});
+      holidayAnchors.push({r:sr,c:dc});
+      for(var rr=sr;rr<=er;rr++)for(var cc=dc;cc<=endC;cc++)holidayCells.add(rr+','+cc);
+    });
+  });
+  return{merges:merges,holidayCells:holidayCells,holidayAnchors:holidayAnchors};
+}
+
+/**
+ * 套用所有儲存格樣式至工作表
+ * @param {Object} ws - XLSX 工作表物件
+ * @param {Object} range - 工作表範圍（由 decode_range 取得）
+ * @param {Object} styles - 樣式物件集合（由 buildExportStyles 產生）
+ * @param {number} noteR - 備註列起始列號
+ * @param {Set} holidayCells - 放假儲存格座標集合
+ * @param {Array} holidayAnchors - 放假錨點陣列
+ * @param {number} DATA_START_ROW - 資料起始列號（標頭列之後）
+ */
+function applySheetStyles(ws,range,styles,noteR,holidayCells,holidayAnchors,DATA_START_ROW){
+  /* 在合併錨點儲存格寫入「放假」文字 */
+  holidayAnchors.forEach(function(a){var addr=XLSX.utils.encode_cell(a);ws[addr]={t:'s',v:'放假'};});
+  /* 逐格套用樣式 */
+  for(var R=range.s.r;R<=range.e.r;R++){
+    for(var C=range.s.c;C<=range.e.c;C++){
+      var addr=XLSX.utils.encode_cell({r:R,c:C});
+      if(!ws[addr])ws[addr]={t:'s',v:''};
+      if(R===0){ws[addr].s=styles.sTitle;}
+      else if(R===1){ws[addr].s=(C===0)?styles.sHdrLabel:styles.sDateVal;}
+      else if(R===2){ws[addr].s=(C===0)?styles.sHdrLabel:styles.sDayVal;}
+      else if(R>=noteR){ws[addr].s=styles.sNote;}
+      else if(C===0){ws[addr].s=styles.sTime;}
+      else{
+        /* 檢查是否為放假合併區域 */
+        var inH=holidayCells.has(R+','+C);
+        if(inH){ws[addr].s=styles.sHoliday;}
+        else{
+        /* 判斷此格是否為空（無人指派）*/
+        var rowOff=(R-DATA_START_ROW)%2; /* 0=姓名列, 1=簽名列 */
+        var nameR=rowOff===1?R-1:R;
+        var colOff=(C-1)%2; /* 0=學號欄, 1=姓名欄 */
+        var idC=colOff===0?C:C-1;
+        var idAddr=XLSX.utils.encode_cell({r:nameR,c:idC});
+        var slotEmpty=!ws[idAddr]||!ws[idAddr].v;
+        if(rowOff===1){ws[addr].s=slotEmpty?styles.sSigEmpty:styles.sSig;}
+        else if(colOff===0){ws[addr].s=styles.sId;}
+        else{ws[addr].s=slotEmpty?styles.sNameEmpty:styles.sName;}
+        }
+      }
+    }
+  }
+}
+
+function exportExcel(){
+  var wb=XLSX.utils.book_new();
+  var FN='DFKai-SB';
+  /* 邊框預設：粗邊=外框/日期分隔（2pt 對應 ODS），細邊=學號姓名分隔 */
+  var bM={style:'medium',color:{rgb:'000000'}},bT={style:'thin',color:{rgb:'000000'}};
+  /* 空白格灰色填充 */
   var grayFill={patternType:'solid',fgColor:{rgb:'D8D8D8'}};
-  /* Per-sheet font sizes: {title, hdrLabel(col A), dateVal, dayVal(weekday), time, data(ID/Name), note} */
+  /* 各工作表字型大小設定 */
   var FONT_SIZES={'值班':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:28},'夜巡':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'週間':{title:20,hdrLabel:16,dateVal:20,dayVal:16,time:18,data:24,note:16,holiday:24},'校巡':{title:22,hdrLabel:16,dateVal:16,dayVal:16,time:16,data:16,note:16,holiday:16},'寢巡':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'警技館':{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20,holiday:24},'監廚':{title:20,hdrLabel:18,dateVal:20,dayVal:20,time:18,data:24,note:20,holiday:28},'總隊值星':{title:26,hdrLabel:20,dateVal:20,dayVal:20,time:18,data:25,note:20,holiday:25}};
-  /* Column widths per duty type (matching reference ODS) */
+  /* 各勤務類型欄寬（對應 ODS） */
   var COL_WIDTHS={'值班':{time:9,id:7,name:20},'夜巡':{time:11,id:7,name:14},'週間':{time:11,id:7,name:14},'校巡':{time:13,id:7,name:11},'寢巡':{time:11,id:7,name:14},'警技館':{time:11,id:7,name:14},'監廚':{time:19,id:8,name:12},'總隊值星':{time:9,id:7,name:24}};
-  /* Header row heights per duty type (title/date/weekday, matching reference ODS) */
+  /* 標頭列高（對應 ODS） */
   var HDR_HEIGHTS={'夜巡':{date:28,day:49},'校巡':{date:29,day:22},'總隊值星':{date:29,day:48}};
-  /* Note section row heights per duty type (5 rows, matching reference ODS) */
+  /* 備註區段列高（5 列，對應 ODS） */
   var NOTE_HEIGHTS={'值班':[30,49.5,39.75,30,51],'夜巡':[39.75,39.75,39.75,30,69.75],'週間':[39.75,39.75,39.75,30,39.75],'校巡':[37,37,37,37,37],'寢巡':[30,49.5,39.75,30,39.75],'警技館':[30,49.5,39.75,30,39.75],'監廚':[39.75,39.75,39.75,30,39.75],'總隊值星':[42,42,42,42,42]};
-  /* Time slot font override */
+  /* 時段欄字型覆寫 */
   var TIME_FONT={'寢巡':'標楷體-繁','警技館':'標楷體-繁'};
-  /* Slot format: raw=no colons, fullwidth=：+newline, halfwidth=default */
+  /* 時段格式：raw=無冒號, fullwidth=全形冒號+換行, halfwidth=預設 */
   var SLOT_FMT={'值班':'raw','監廚':'raw','總隊值星':'raw','校巡':'raw','夜巡':'fullwidth','寢巡':'fullwidth','警技館':'fullwidth','週間':'fullwidth'};
-  function fmtSlotEx(slot,fmt){var p=slot.split('-');if(fmt==='raw')return p[0]+'-'+p[1];if(fmt==='fullwidth')return p[0].slice(0,2)+'：'+p[0].slice(2)+'-\n'+p[1].slice(0,2)+'：'+p[1].slice(2);return p[0].slice(0,2)+':'+p[0].slice(2)+'-'+p[1].slice(0,2)+':'+p[1].slice(2);}
   var noteText='備註：\n1、輪值勤務，請同學務必提早5-10分鐘到勤。\n2、請同學互相提醒值勤時間。\n3、如有疑問(如衝堂、因故無法值班等)，請向勤務排表員921127江睿承(B218)、921165謝顥譯(B218)反映。\n4、本表公布後，請同學於自己名字下方簽名(押時間)確認，如需更改，請報由區隊長核章修正，若逾時未簽名者，將依規定記點處分。';
-  /* Horizontal layout: 校巡 (people side-by-side, pp*2 cols/day, 2 rows/slot) */
+  /* 水平排列勤務（校巡：人員並排） */
   var HORIZ={'校巡':true};
   var TITLE_MAP={'值班':'隊部值班表','夜巡':'友誼、警英夜巡勤務表','週間':'週間校巡勤務表','校巡':'總隊值星假日校園巡邏勤務表','寢巡':' 寢巡勤務表','警技館':' 警技館值班勤務表','監廚':'監廚勤務表','總隊值星':' 總隊值星週隊部值班表'};
 
-  /* Explicit sheet order matching reference ODS */
+  /* 工作表順序（對應 ODS） */
   var SHEET_ORDER=['值班','夜巡','週間','校巡','寢巡','警技館','監廚','總隊值星'];
   SHEET_ORDER.filter(function(dt){return S.active[dt];}).forEach(function(dtype){
     var cfg=S.active[dtype],def=DUTY_DEFS[dtype];
     var days=cfg.days,pp=cfg.pp,horiz=!!HORIZ[dtype];
-    /* Override export day order for specific duty types */
+    /* 覆寫匯出星期順序 */
     var EXPORT_DAY_ORDER={'校巡':['五','六','日'],'警技館':['五','一','二','三','四']};
     var exportOrder=EXPORT_DAY_ORDER[dtype];
     if(exportOrder){days=exportOrder.filter(function(d){return cfg.days.indexOf(d)>=0;});}
-    /* Override export slot order for specific duty types */
+    /* 覆寫匯出時段順序 */
     var EXPORT_SLOT_ORDER={'夜巡':['0100-0300','0300-0500','2300-0100']};
     var exportSlots=EXPORT_SLOT_ORDER[dtype]||def.slots;
     var colsPerDay=horiz?pp*2:2;
     var rowsPerSlot=horiz?2:pp*2;
     var totalCols=1+days.length*colsPerDay;
-    /* Minimum columns for layout (寢巡 needs 11 cols to match ODS) */
+    /* 最小欄數（寢巡需 11 欄對應 ODS） */
     var MIN_COLS={'寢巡':11};
     var minC=MIN_COLS[dtype];
     if(minC&&totalCols<minC)totalCols=minC;
-    var aoa=[],merges=[],rh=[];
-    /* Per-sheet dynamic styles (no bold, font sizes vary by duty type) */
+
+    /* 建立樣式 */
     var fs=FONT_SIZES[dtype]||{title:22,hdrLabel:18,dateVal:20,dayVal:24,time:18,data:24,note:20};
     var timeFN=TIME_FONT[dtype]||FN;
     var slotFmt=SLOT_FMT[dtype]||'halfwidth';
     var hh=HDR_HEIGHTS[dtype]||{date:28,day:34};
-    var sTitle={font:{sz:fs.title,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-    var sHdrLabel={font:{sz:fs.hdrLabel,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-    var sDateVal={font:{sz:fs.dateVal,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-    var sDayVal={font:{sz:fs.dayVal,name:FN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-    var sTime={font:{sz:fs.time,name:timeFN},alignment:{horizontal:'center',vertical:'center',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-    var sNote={font:{sz:fs.note,name:FN},alignment:{horizontal:'left',vertical:'top',wrapText:true},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-    /* Per-sheet data cell styles (ID/Name/Sig) using fs.data */
-    var sId={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrId,fill:{patternType:'solid',fgColor:{rgb:'D8D8D8'}}};
-    var sName={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-    var sSig={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:{patternType:'solid',fgColor:{rgb:'FFFFFF'}}};
-    var sNameEmpty={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrName,fill:grayFill};
-    var sSigEmpty={font:{sz:fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
-    var sHoliday={font:{sz:fs.holiday||fs.data,name:FN},alignment:{horizontal:'center',vertical:'center'},border:bdrAll,fill:grayFill};
+    var styles=buildExportStyles(fs,FN,timeFN,bM,bT,grayFill);
 
-    /* Build per-slot holiday map for export: holidaySlotMap[dayIdx][exportSlotIdx]=true */
+    /* 建立放假時段對照表 */
     var holidaySet=S.holidays[dtype]||new Set();
     var holidaySlotMap={};
     for(var di=0;di<days.length;di++){for(var esi=0;esi<exportSlots.length;esi++){if(holidaySet.has(days[di]+'|'+exportSlots[esi])){if(!holidaySlotMap[di])holidaySlotMap[di]={};holidaySlotMap[di][esi]=true;}}}
 
-    /* Row 0: Title */
+    /* 建立標頭列（標題、日期、星期） */
     var titleLabel=TITLE_MAP[dtype]||def.label;
-    var title='中央警察大學 92期1隊  114學年度第2學期'+titleLabel+'  (第'+S.weekNum+'週)';
-    var titleRow=new Array(totalCols).fill('');titleRow[0]=title;
-    aoa.push(titleRow);merges.push({s:{r:0,c:0},e:{r:0,c:totalCols-1}});
-    rh.push({hpt:33});
+    var hdr=buildSheetHeader(dtype,days,colsPerDay,totalCols,hh,titleLabel);
 
-    /* Row 1: Dates */
-    var dateRow=new Array(totalCols).fill('');dateRow[0]='日期';
-    for(var i=0;i<days.length;i++){var dc=1+i*colsPerDay;dateRow[dc]=weekDate(S.weekNum,days[i]);merges.push({s:{r:1,c:dc},e:{r:1,c:dc+colsPerDay-1}});}
-    aoa.push(dateRow);rh.push({hpt:hh.date});
+    /* 建立資料列（時段指派） */
+    var data=buildSheetData(dtype,days,pp,horiz,colsPerDay,exportSlots,slotFmt,holidaySlotMap,totalCols,rowsPerSlot);
 
-    /* Row 2: Days */
-    var dayRow=new Array(totalCols).fill('');dayRow[0]='星期';
-    for(var i=0;i<days.length;i++){var dc=1+i*colsPerDay;dayRow[dc]=days[i];merges.push({s:{r:2,c:dc},e:{r:2,c:dc+colsPerDay-1}});}
-    aoa.push(dayRow);rh.push({hpt:hh.day});
+    /* 合併標頭與資料 */
+    var aoa=hdr.aoa.concat(data.aoa);
+    var merges=hdr.merges.concat(data.merges);
+    var rh=hdr.rh.concat(data.rh);
+    var noteR=data.endRow;
 
-    /* Data rows: each slot = name rows + signature rows */
-    var r=3;
-    exportSlots.forEach(function(slot,exportSlotIdx){
-      if(horiz){
-        /* Horizontal: 2 rows per slot (name + sig), pp people side by side */
-        var nameRow=new Array(totalCols).fill('');
-        var sigRow=new Array(totalCols).fill('');
-        nameRow[0]=fmtSlotEx(slot,slotFmt);
-        for(var i=0;i<days.length;i++){
-          var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
-          for(var p=0;p<pp;p++){
-            var dc=1+i*colsPerDay+p*2;
-            if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
-          }
-          /* Merge signature cells per person (skip holiday slots) */
-          if(!(holidaySlotMap[i]&&holidaySlotMap[i][exportSlotIdx])){for(var p=0;p<pp;p++){
-            var dc=1+i*colsPerDay+p*2;
-            merges.push({s:{r:r+1,c:dc},e:{r:r+1,c:dc+1}});
-          }}
-        }
-        aoa.push(nameRow);aoa.push(sigRow);
-        merges.push({s:{r:r,c:0},e:{r:r+1,c:0}});
-        rh.push({hpt:45});rh.push({hpt:60});
-        r+=2;
-      }else{
-        /* Vertical: pp*2 rows per slot, each person = name row + sig row */
-        for(var p=0;p<pp;p++){
-          var nameRow=new Array(totalCols).fill('');
-          var sigRow=new Array(totalCols).fill('');
-          if(p===0)nameRow[0]=fmtSlotEx(slot,slotFmt);
-          for(var i=0;i<days.length;i++){
-            var key=days[i]+'|'+slot,arr=S.assignments[dtype]&&S.assignments[dtype][key]||[];
-            var dc=1+i*2;
-            if(arr[p]){nameRow[dc]=String(arr[p].id).padStart(3,'0');nameRow[dc+1]=arr[p].name;}
-            /* Merge signature row B:C for this day (skip holiday slots) */
-            if(!(holidaySlotMap[i]&&holidaySlotMap[i][exportSlotIdx]))merges.push({s:{r:r+p*2+1,c:dc},e:{r:r+p*2+1,c:dc+1}});
-          }
-          aoa.push(nameRow);aoa.push(sigRow);
-          rh.push({hpt:45});rh.push({hpt:60});
-        }
-        /* Merge time col across all rows for this slot */
-        if(rowsPerSlot>1)merges.push({s:{r:r,c:0},e:{r:r+rowsPerSlot-1,c:0}});
-        r+=rowsPerSlot;
-      }
-    });
+    /* 建立放假區域合併 */
+    var hm=buildHolidayMerges(holidaySlotMap,days,horiz,colsPerDay,pp);
+    merges=merges.concat(hm.merges);
 
-    /* Holiday: merge per-slot groups for each day */
-    var noteR=r;
-    var holidayCells=new Set();
-    var holidayAnchors=[];
-    Object.keys(holidaySlotMap).forEach(function(diStr){
-      var di=parseInt(diStr);
-      var dc=1+di*(horiz?colsPerDay:2),endC=dc+(horiz?colsPerDay:2)-1;
-      var sis=Object.keys(holidaySlotMap[di]).map(Number).sort(function(a,b){return a-b;});
-      var gs=[],gs0=sis[0],gs1=sis[0];
-      for(var k=1;k<sis.length;k++){if(sis[k]===gs1+1)gs1=sis[k];else{gs.push([gs0,gs1]);gs0=gs1=sis[k];}}
-      gs.push([gs0,gs1]);
-      gs.forEach(function(g){
-        var sr=horiz?(3+g[0]*2):(3+g[0]*pp*2);
-        var er=horiz?(3+g[1]*2+1):(3+g[1]*pp*2+pp*2-1);
-        merges.push({s:{r:sr,c:dc},e:{r:er,c:endC}});
-        holidayAnchors.push({r:sr,c:dc});
-        for(var rr=sr;rr<=er;rr++)for(var cc=dc;cc<=endC;cc++)holidayCells.add(rr+','+cc);
-      });
-    });
-
-    /* 寢巡: merge blank area (cols 3~10) for date, day, and data rows */
+    /* 寢巡：合併空白區域（欄 3~10） */
     if(MIN_COLS[dtype]&&totalCols>1+days.length*colsPerDay){
       var blankStart=1+days.length*colsPerDay;
       var blankEnd=totalCols-1;
@@ -1435,54 +1557,22 @@ function exportExcel(){
       if(noteR>3)merges.push({s:{r:3,c:blankStart},e:{r:noteR-1,c:blankEnd}});
     }
 
-    /* Note row */
+    /* 備註列 */
     var nh=NOTE_HEIGHTS[dtype]||[36,36,36,36,36];
     var noteRow=new Array(totalCols).fill('');noteRow[0]=noteText;
     aoa.push(noteRow);merges.push({s:{r:noteR,c:0},e:{r:noteR+4,c:totalCols-1}});
     rh.push({hpt:nh[0]});
-    /* Add 4 extra empty rows for note area */
     for(var n=1;n<5;n++){aoa.push(new Array(totalCols).fill(''));rh.push({hpt:nh[n]});}
 
-    /* Build worksheet */
+    /* 建立工作表並套用合併 */
     var ws=XLSX.utils.aoa_to_sheet(aoa);
     ws['!merges']=merges;
 
-    /* Set holiday text in merged anchor cells */
-    holidayAnchors.forEach(function(a){var addr=XLSX.utils.encode_cell(a);ws[addr]={t:'s',v:'放假'};});
-
-    /* Apply styles */
-    var DATA_START_ROW = 3; // After title(0), date(1), weekday(2) rows
+    /* 套用樣式 */
     var range=XLSX.utils.decode_range(ws['!ref']);
-    for(var R=range.s.r;R<=range.e.r;R++){
-      for(var C=range.s.c;C<=range.e.c;C++){
-        var addr=XLSX.utils.encode_cell({r:R,c:C});
-        if(!ws[addr])ws[addr]={t:'s',v:''};
-        if(R===0){ws[addr].s=sTitle;}
-        else if(R===1){ws[addr].s=(C===0)?sHdrLabel:sDateVal;}
-        else if(R===2){ws[addr].s=(C===0)?sHdrLabel:sDayVal;}
-        else if(R>=noteR){ws[addr].s=sNote;}
-        else if(C===0){ws[addr].s=sTime;}
-        else{
-          /* Check if cell is in a holiday merge */
-          var inH=holidayCells.has(R+','+C);
-          if(inH){ws[addr].s=sHoliday;}
-          else{
-          /* 判斷此格是否為空（無人指派）*/
-          var rowOff=(R-DATA_START_ROW)%2; /* 0=name row, 1=sig row */
-          var nameR=rowOff===1?R-1:R;
-          var colOff=(C-1)%2; /* 0=id col, 1=name col */
-          var idC=colOff===0?C:C-1;
-          var idAddr=XLSX.utils.encode_cell({r:nameR,c:idC});
-          var slotEmpty=!ws[idAddr]||!ws[idAddr].v;
-          if(rowOff===1){ws[addr].s=slotEmpty?sSigEmpty:sSig;}
-          else if(colOff===0){ws[addr].s=sId;}
-          else{ws[addr].s=slotEmpty?sNameEmpty:sName;}
-          }
-        }
-      }
-    }
+    applySheetStyles(ws,range,styles,noteR,hm.holidayCells,hm.holidayAnchors,3);
 
-    /* Column widths (per duty type, matching reference ODS) */
+    /* 欄寬（對應 ODS） */
     var cwDef=COL_WIDTHS[dtype]||{time:11,id:7,name:14};
     var cw=[{wch:cwDef.time}];
     for(var i=0;i<days.length;i++){
@@ -1491,7 +1581,7 @@ function exportExcel(){
     }
     ws['!cols']=cw;
     ws['!rows']=rh;
-    /* Print setup: landscape, fit to 1 page wide, narrow margins */
+    /* 列印設定：橫向、縮放至 1 頁寬、窄邊界 */
     ws['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:0,paperSize:9};
     ws['!margins']={left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2};
 
