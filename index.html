@@ -197,6 +197,7 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .pk-badge.night{background:rgba(52,73,94,.25);color:#7f8c8d}
 .pk-badge.conflict{background:rgba(231,76,60,.2);color:#c0392b}
 .pk-item.forced{opacity:.8;border-left:3px solid var(--gold)}
+.pk-item.highlighted{background:rgba(42,82,152,.4);outline:2px solid var(--gold)}
 
 /* === Toast with animation === */
 .toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(20px);background:rgba(39,174,96,.95);color:#fff;padding:12px 28px;border-radius:10px;font-size:.92rem;z-index:300;opacity:0;transition:all .3s ease;pointer-events:none;box-shadow:0 4px 20px rgba(39,174,96,.3)}
@@ -969,7 +970,7 @@ function buildDutyTable(dtype){
 }
 
 /* ===== UI: Picker ===== */
-var pickerCtx=null,pickerState={};
+var pickerCtx=null,pickerState={},pickerHighlightIdx=-1;
 function getAllStudentsForPicker(dtype,day,slot,slotIds,current,slotsMap){
   var def=DUTY_DEFS[dtype],lastWeek=getLastWeekIds();
   var tempRelease=new Set();if(current)tempRelease.add(current.id);
@@ -1050,6 +1051,7 @@ function openPicker(dtype,day,slot,idx,tdEl){
   };
 }
 function refreshPickerList(){
+  pickerHighlightIdx=-1; /* 重新篩選時重設鍵盤高亮索引 */
   var q=byId('pickerSearch').value.trim().toLowerCase();
   var src=pickerState.showAll?pickerState.allStudents:pickerState.candidates;
   var filtered=q?src.filter(function(s){return String(s.id).indexOf(q)>=0||s.name.toLowerCase().indexOf(q)>=0||s.dept.toLowerCase().indexOf(q)>=0;}):src;
@@ -1076,6 +1078,7 @@ function renderPickerList(candidates,current,showAll){
   candidates.forEach(function(s){
     var forced=showAll&&s.reasons&&s.reasons.length>0;
     var item=h('div',{className:'pk-item'+(forced?' forced':'')});
+    item.setAttribute('tabindex','0'); /* 鍵盤導航：允許 pk-item 被聚焦 */
     item.appendChild(h('span',{className:'pk-id'},String(s.id)));
     var nameSpan=h('span',{className:'pk-name'},s.name);
     item.appendChild(nameSpan);
@@ -1178,7 +1181,18 @@ function assignPerson(student){
   }
   renderStatsBar();renderDashboard();
 }
-function closePicker(){$('pickerModal').classList.remove('show');document.body.style.overflow='';pickerCtx=null;}
+function closePicker(){$('pickerModal').classList.remove('show');document.body.style.overflow='';pickerCtx=null;pickerHighlightIdx=-1;}
+/* === Picker 鍵盤導航：更新高亮項目並捲動至可見 === */
+function updatePickerHighlight(){
+  var list=$('pickerList');
+  var items=list.querySelectorAll('.pk-item');
+  items.forEach(function(el,i){
+    el.classList.toggle('highlighted',i===pickerHighlightIdx);
+  });
+  if(pickerHighlightIdx>=0&&items[pickerHighlightIdx]){
+    items[pickerHighlightIdx].scrollIntoView({block:'nearest',behavior:'smooth'});
+  }
+}
 function undoLastAssign(){
   if(undoStack.length===0){showToast('沒有可復原的操作');return;}
   var u=undoStack.pop();
@@ -1688,6 +1702,70 @@ function handleFile(file){
   };
   reader.readAsArrayBuffer(file);
 }
+
+/* ===== 內建自測模組 ===== */
+function runSelfTests(){
+  var passed=0, failed=0, results=[];
+  function assert(name, actual, expected){
+    if(actual===expected){passed++;results.push('\u2713 '+name);}
+    else{failed++;results.push('\u2715 '+name+': 預期 '+JSON.stringify(expected)+' 但得到 '+JSON.stringify(actual));}
+  }
+  function assertTruthy(name, val){assert(name, !!val, true);}
+  function assertFalsy(name, val){assert(name, !!val, false);}
+
+  /* --- timeToMin --- */
+  assert('timeToMin("0800")', timeToMin('0800'), 480);
+  assert('timeToMin("0000")', timeToMin('0000'), 0);
+  assert('timeToMin("2359")', timeToMin('2359'), 1439);
+  assert('timeToMin("1200")', timeToMin('1200'), 720);
+
+  /* --- slotHours --- */
+  assert('slotHours("0800-1000")', slotHours('0800-1000'), 2);
+  assert('slotHours("2300-0100") 跨日', slotHours('2300-0100'), 2);
+  assert('slotHours("0600-0800")', slotHours('0600-0800'), 2);
+  var sh=slotHours('1200-1350');
+  assert('slotHours("1200-1350") 近似值', Math.abs(sh-110/60)<0.001, true);
+
+  /* --- slotsOverlap --- */
+  assertTruthy('slotsOverlap: 完全重疊', slotsOverlap([{day:'\u4e00',slot:'0800-1000'}], '\u4e00', '0800-1000'));
+  assertTruthy('slotsOverlap: 部分重疊', slotsOverlap([{day:'\u4e00',slot:'0800-1000'}], '\u4e00', '0900-1100'));
+  assertFalsy('slotsOverlap: 不重疊', slotsOverlap([{day:'\u4e00',slot:'0800-1000'}], '\u4e00', '1000-1200'));
+  assertFalsy('slotsOverlap: 不同天', slotsOverlap([{day:'\u4e00',slot:'0800-1000'}], '\u4e8c', '0800-1000'));
+  assertFalsy('slotsOverlap: 空陣列', slotsOverlap([], '\u4e00', '0800-1000'));
+  assertTruthy('slotsOverlap: 跨日重疊', slotsOverlap([{day:'\u65e5',slot:'2300-0100'}], '\u65e5', '2200-2400'));
+
+  /* --- fmtSlot --- */
+  assert('fmtSlot("0800-1000")', fmtSlot('0800-1000'), '08:00-10:00');
+  assert('fmtSlot("2300-0100")', fmtSlot('2300-0100'), '23:00-01:00');
+
+  /* --- dayOffset --- */
+  assert('dayOffset("\u4e00")', dayOffset('\u4e00'), 0);
+  assert('dayOffset("\u65e5")', dayOffset('\u65e5'), 6);
+  assert('dayOffset("\u4e09")', dayOffset('\u4e09'), 2);
+
+  /* --- isNightSlot --- */
+  assertTruthy('isNightSlot("2000-2200")', isNightSlot('2000-2200'));
+  assertFalsy('isNightSlot("0800-1000")', isNightSlot('0800-1000'));
+  assertTruthy('isNightSlot("2300-0100")', isNightSlot('2300-0100'));
+
+  /* --- isWithdrawn --- */
+  assertTruthy('isWithdrawn: 退學', isWithdrawn({name:'\u5f35\u4e09(\u9000\u5b78)',note:''}));
+  assertTruthy('isWithdrawn: 休學 in note', isWithdrawn({name:'\u674e\u56db',note:'\u4f11\u5b78\u4e2d'}));
+  assertFalsy('isWithdrawn: 正常', isWithdrawn({name:'\u738b\u4e94',note:''}));
+
+  /* --- getDeptShort --- */
+  assert('getDeptShort: 行政系', getDeptShort('\u884c\u653f\u7cfb'), '\u884c\u653f\u7cfb');
+  assert('getDeptShort: 犯防系預防組', getDeptShort('\u72af\u9632\u7cfb\u9810\u9632\u7d44'), '\u72af\u9810');
+
+  /* --- 結果摘要 --- */
+  var summary='\u81ea\u6e2c\u7d50\u679c\uff1a'+passed+' \u901a\u904e / '+failed+' \u5931\u6557\uff08\u5171 '+(passed+failed)+' \u9805\uff09';
+  console.log(summary);
+  results.forEach(function(r){console.log(r);});
+  if(failed>0){console.error('\u26a0 \u6709 '+failed+' \u9805\u6e2c\u8a66\u5931\u6557\uff01');}
+  else{console.log('\u2713 \u6240\u6709\u81ea\u6e2c\u901a\u904e');}
+  return {passed:passed, failed:failed, results:results};
+}
+
 function init(){
   $('resultTabs').addEventListener('click',function(e){
     var btn=e.target.closest('.tab-btn');if(!btn)return;
@@ -1773,9 +1851,60 @@ function init(){
   $('backupFile').addEventListener('change',function(){if(this.files[0])importBackup(this.files[0]);this.value='';});
   $('pickerClose').addEventListener('click',closePicker);
   $('pickerModal').addEventListener('click',function(e){if(e.target===$('pickerModal'))closePicker();});
+  /* === Picker 鍵盤導航 + Focus Trap === */
   document.addEventListener('keydown',function(e){
-    if(e.key==='Escape')closePicker();
-    if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.target.matches('input,textarea')){e.preventDefault();undoLastAssign();}
+    var modalOpen=$('pickerModal').classList.contains('show');
+    if(e.key==='Escape'&&modalOpen){closePicker();return;}
+    if((e.ctrlKey||e.metaKey)&&e.key==='z'&&!e.target.matches('input,textarea')){e.preventDefault();undoLastAssign();return;}
+    if(!modalOpen)return;
+    var list=$('pickerList');
+    var items=list.querySelectorAll('.pk-item');
+    /* 方向鍵上下：在 picker 清單中移動高亮 */
+    if(e.key==='ArrowDown'){
+      e.preventDefault();
+      if(items.length===0)return;
+      pickerHighlightIdx=Math.min(pickerHighlightIdx+1,items.length-1);
+      updatePickerHighlight();
+      return;
+    }
+    if(e.key==='ArrowUp'){
+      e.preventDefault();
+      if(items.length===0)return;
+      pickerHighlightIdx=Math.max(pickerHighlightIdx-1,0);
+      updatePickerHighlight();
+      return;
+    }
+    /* Enter 鍵：選取高亮項目 */
+    if(e.key==='Enter'&&pickerHighlightIdx>=0&&items.length>0){
+      e.preventDefault();
+      if(items[pickerHighlightIdx])items[pickerHighlightIdx].click();
+      return;
+    }
+    /* Focus Trap：Tab 鍵在 modal 內循環 */
+    if(e.key==='Tab'){
+      var searchInput=$('pickerSearch');
+      var showAllCb=$('pickerShowAll');
+      var closeBtn=$('pickerClose');
+      /* 收集可聚焦元素：搜尋框 → 顯示全部核取方塊 → picker 清單項目 → 關閉按鈕 */
+      var focusable=[searchInput,showAllCb];
+      items.forEach(function(el){focusable.push(el);});
+      focusable.push(closeBtn);
+      /* 過濾隱藏元素 */
+      focusable=focusable.filter(function(el){return el&&el.offsetParent!==null;});
+      if(focusable.length===0)return;
+      var currentIdx=focusable.indexOf(document.activeElement);
+      if(e.shiftKey){
+        /* Shift+Tab：往前循環 */
+        e.preventDefault();
+        var prevIdx=currentIdx<=0?focusable.length-1:currentIdx-1;
+        focusable[prevIdx].focus();
+      }else{
+        /* Tab：往後循環 */
+        e.preventDefault();
+        var nextIdx=currentIdx>=focusable.length-1?0:currentIdx+1;
+        focusable[nextIdx].focus();
+      }
+    }
   });
 }
 document.addEventListener('DOMContentLoaded',init);
