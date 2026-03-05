@@ -769,8 +769,8 @@ function renderConfig(){
     grid.appendChild(card);
 
     card.addEventListener('click',function(e){
-      if(e.target.closest('.dc-config')&&!e.target.closest('.dc-head')){return;}
       if(e.target.classList.contains('day-tog')){e.target.classList.toggle('on');updateConfigSummary();return;}
+      if(e.target.closest('.dc-config')&&!e.target.closest('.dc-head')){return;}
       if(e.target.closest('.cfg-pp'))return;
       card.classList.toggle('selected');
       var ck=card.querySelector('.dc-check'),sel=card.classList.contains('selected');
