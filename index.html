@@ -84,6 +84,15 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 .day-tog{padding:6px 12px;border:1px solid var(--border-l);border-radius:6px;font-size:.82rem;cursor:pointer;color:var(--text-m);background:transparent;transition:all .2s ease}
 .day-tog:hover{border-color:var(--primary-ll);color:var(--text)}
 .day-tog.on{background:var(--primary-ll);border-color:var(--primary-ll);color:#fff;box-shadow:0 2px 8px rgba(42,82,152,.3)}
+.day-order-zone{display:flex;gap:5px;flex-wrap:wrap;margin-top:6px;min-height:32px;padding:6px 8px;border:1px dashed var(--border-l);border-radius:8px;background:rgba(255,255,255,.03);transition:border-color .2s}
+.day-order-zone:empty{display:none}
+.day-order-zone.drag-over{border-color:var(--gold);background:rgba(212,168,67,.08)}
+.day-order-label{font-size:.75rem;color:var(--text-d);margin-top:6px}
+.day-chip{padding:5px 14px;border-radius:6px;font-size:.82rem;cursor:grab;color:#fff;background:var(--primary);border:1px solid var(--primary-ll);user-select:none;transition:all .15s ease;display:inline-flex;align-items:center;gap:4px}
+.day-chip:active{cursor:grabbing;opacity:.7}
+.day-chip.dragging{opacity:.4;transform:scale(.95)}
+.day-chip .chip-arrow{font-size:.65rem;color:rgba(255,255,255,.6);cursor:pointer;padding:0 2px}
+.day-chip .chip-arrow:hover{color:#fff}
 
 /* === Summary Bar === */
 .summary-bar{background:rgba(42,82,152,.1);border:1px solid rgba(42,82,152,.2);border-radius:10px;padding:14px 18px;margin-bottom:18px;display:flex;gap:24px;flex-wrap:wrap;font-size:.9rem;animation:fadeSlideIn .3s ease}
@@ -262,6 +271,8 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
   .dc-config input[type=number]{min-height:44px;padding:10px 8px}
   .dc-config .day-toggles{gap:4px}
   .day-tog{padding:8px 14px;min-height:44px;display:inline-flex;align-items:center;justify-content:center;font-size:.84rem}
+  .day-chip{padding:8px 14px;min-height:40px;font-size:.84rem}
+  .day-chip .chip-arrow{font-size:.75rem;padding:2px 4px}
 
   /* Summary bar */
   .summary-bar{flex-direction:column;gap:8px;padding:12px 14px}
@@ -826,11 +837,18 @@ function renderConfig(){
       dayDiv.appendChild(btn);
     });
     cfg.appendChild(dayDiv);
+
+    var orderLabel=h('div',{className:'day-order-label'},'排列順序（可拖曳調整）');
+    cfg.appendChild(orderLabel);
+    var orderZone=h('div',{className:'day-order-zone','data-duty':dtype});
+    cfg.appendChild(orderZone);
+
     card.appendChild(cfg);
     grid.appendChild(card);
+    syncDayOrder(card);
 
     card.addEventListener('click',function(e){
-      if(e.target.classList.contains('day-tog')){e.target.classList.toggle('on');updateConfigSummary();return;}
+      if(e.target.classList.contains('day-tog')){e.target.classList.toggle('on');syncDayOrder(card);updateConfigSummary();return;}
       if(e.target.closest('.dc-config')&&!e.target.closest('.dc-head')){return;}
       if(e.target.closest('.cfg-pp'))return;
       card.classList.toggle('selected');
@@ -870,12 +888,78 @@ function updateWeekDates(){
   }
   updateConfigSummary();
 }
+/* ===== Day Order: sync & drag-and-drop ===== */
+function syncDayOrder(card){
+  var zone=card.querySelector('.day-order-zone');
+  if(!zone)return;
+  var existing=[];zone.querySelectorAll('.day-chip').forEach(function(c){existing.push(c.getAttribute('data-day'));});
+  var active=[];card.querySelectorAll('.day-tog.on').forEach(function(b){active.push(b.getAttribute('data-day'));});
+  /* keep existing order for days still active, append newly added ones at end */
+  var ordered;
+  if(existing.length>0){
+    ordered=existing.filter(function(d){return active.indexOf(d)>=0;});
+    active.forEach(function(d){if(ordered.indexOf(d)<0)ordered.push(d);});
+  }else{
+    /* first render: use defDays order (五六日) instead of DOM order (日五六) */
+    var dtype=zone.getAttribute('data-duty');
+    var defOrder=DUTY_DEFS[dtype]?DUTY_DEFS[dtype].defDays:[];
+    ordered=defOrder.filter(function(d){return active.indexOf(d)>=0;});
+    active.forEach(function(d){if(ordered.indexOf(d)<0)ordered.push(d);});
+  }
+  clearEl(zone);
+  ordered.forEach(function(d){
+    var chip=h('div',{className:'day-chip',draggable:'true','data-day':d});
+    var leftArr=h('span',{className:'chip-arrow chip-left',title:'左移'},'◀');
+    var label=document.createTextNode(d);
+    var rightArr=h('span',{className:'chip-arrow chip-right',title:'右移'},'▶');
+    chip.appendChild(leftArr);chip.appendChild(label);chip.appendChild(rightArr);
+    leftArr.addEventListener('click',function(e){e.stopPropagation();moveDayChip(zone,chip,-1);updateConfigSummary();});
+    rightArr.addEventListener('click',function(e){e.stopPropagation();moveDayChip(zone,chip,1);updateConfigSummary();});
+    /* HTML5 drag-and-drop */
+    chip.addEventListener('dragstart',function(e){chip.classList.add('dragging');e.dataTransfer.effectAllowed='move';e.dataTransfer.setData('text/plain',d);});
+    chip.addEventListener('dragend',function(){chip.classList.remove('dragging');});
+    zone.appendChild(chip);
+  });
+  /* drop zone events */
+  zone.ondragover=function(e){e.preventDefault();e.dataTransfer.dropEffect='move';zone.classList.add('drag-over');};
+  zone.ondragleave=function(){zone.classList.remove('drag-over');};
+  zone.ondrop=function(e){
+    e.preventDefault();zone.classList.remove('drag-over');
+    var dragging=zone.querySelector('.dragging');if(!dragging)return;
+    var target=getDayChipAtPoint(zone,e.clientX);
+    if(target&&target!==dragging){
+      var rect=target.getBoundingClientRect();
+      if(e.clientX<rect.left+rect.width/2){zone.insertBefore(dragging,target);}
+      else{zone.insertBefore(dragging,target.nextSibling);}
+    }
+    updateConfigSummary();
+  };
+}
+function getDayChipAtPoint(zone,x){
+  var chips=zone.querySelectorAll('.day-chip:not(.dragging)');
+  var closest=null,closestDist=Infinity;
+  chips.forEach(function(c){var r=c.getBoundingClientRect();var mid=r.left+r.width/2;var d=Math.abs(x-mid);if(d<closestDist){closestDist=d;closest=c;}});
+  return closest;
+}
+function moveDayChip(zone,chip,dir){
+  var chips=Array.from(zone.querySelectorAll('.day-chip'));
+  var idx=chips.indexOf(chip);
+  if(idx<0)return;
+  var newIdx=idx+dir;
+  if(newIdx<0||newIdx>=chips.length)return;
+  if(dir<0){zone.insertBefore(chip,chips[newIdx]);}
+  else{zone.insertBefore(chip,chips[newIdx].nextSibling);}
+}
 function updateConfigSummary(){
   S.active={};var totalSlots=0,maleSlots=0;
   document.querySelectorAll('.duty-card.selected').forEach(function(card){
     var dtype=card.getAttribute('data-duty'),def=DUTY_DEFS[dtype];
     var pp=parseInt(card.querySelector('.cfg-pp').value)||def.defPP;
-    var days=[];card.querySelectorAll('.day-tog.on').forEach(function(b){days.push(b.getAttribute('data-day'));});
+    /* read day order from the order zone (user-defined order) */
+    var zone=card.querySelector('.day-order-zone');
+    var days=[];
+    if(zone&&zone.children.length>0){zone.querySelectorAll('.day-chip').forEach(function(c){days.push(c.getAttribute('data-day'));});}
+    else{card.querySelectorAll('.day-tog.on').forEach(function(b){days.push(b.getAttribute('data-day'));});}
     if(days.length===0)return;
     S.active[dtype]={days:days,pp:pp};
     var sc=def.slots.length*days.length*pp;totalSlots+=sc;
