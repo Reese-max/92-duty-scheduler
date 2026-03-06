@@ -7,6 +7,7 @@
 <title>92期1隊 半自動勤排系統</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js" integrity="sha384-OUW9euuUyxyHcAhTqbhI+Iyb8LMssXt/cpz0yXhs9UWG2/R/uaWdakx/4cfww7Vb" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js" integrity="sha384-+mbV2IY1Zk/X1p/nWllGySJSUN8uMs+gUAN10Or95UBH0fpj6GfKgPmgC5EXieXG" crossorigin="anonymous"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box}
 :root{
@@ -563,6 +564,19 @@ var EXPORT_SHEET_ORDER=['值班','夜巡','週間','校巡','寢巡','警技館'
 var EXPORT_DAY_ORDER={'校巡':['五','六','日'],'警技館':['五','一','二','三','四']};
 var EXPORT_SLOT_ORDER={'夜巡':['0100-0300','0300-0500','2300-0100']};
 var EXPORT_MIN_COLS={'寢巡':11};
+/* 每種勤務的列印設定（A4直向為主，校巡水平佈局用橫向，時數總表橫向多頁） */
+var EXPORT_PAGE_SETUP={
+  '值班':    {orientation:'portrait',fitToWidth:1,fitToHeight:1,paperSize:9},
+  '夜巡':    {orientation:'portrait',fitToWidth:1,fitToHeight:1,paperSize:9},
+  '週間':    {orientation:'portrait',fitToWidth:1,fitToHeight:1,paperSize:9},
+  '校巡':    {orientation:'landscape',fitToWidth:1,fitToHeight:1,paperSize:9},
+  '寢巡':    {orientation:'portrait',fitToWidth:1,fitToHeight:1,paperSize:9},
+  '警技館':  {orientation:'portrait',fitToWidth:1,fitToHeight:1,paperSize:9},
+  '監廚':    {orientation:'portrait',fitToWidth:1,fitToHeight:1,paperSize:9},
+  '總隊值星':{orientation:'portrait',fitToWidth:1,fitToHeight:1,paperSize:9},
+  '_時數總表':{orientation:'landscape',fitToWidth:1,fitToHeight:0,paperSize:9}
+};
+var EXPORT_MARGINS={left:0.25,right:0.25,top:0.25,bottom:0.25,header:0.1,footer:0.1};
 var EXPORT_NOTE_TEXT='備註：\n1、輪值勤務，請同學務必提早5-10分鐘到勤。\n2、請同學互相提醒值勤時間，特別是夜間值班同學。\n3、如有疑問(如衝堂、因故無法值班等)，請向勤務排表員921127江睿承(B218)、921165謝頡譯(B218)反映。\n4、本表公布後，請同學於自己名字下方簽名(押時間)確認，如需更改，請報由區隊長核章修正，收假前未簽名確認者，將依規定記點處分。';
 var EXPORT_NOTE_TEXTS={
   '值班':'備註：\n1、輪值勤務，請同學務必提早5-10分鐘到勤。\n2、請同學互相提醒值勤時間，特別是夜間值班同學。\n3、如有疑問(如衝堂、因故無法值班等)，請向勤務排表員921127江睿承(B218)、921165謝頡譯(B218)反映。\n4、本表公布後，請同學於自己名字下方簽名(押時間)確認，如需更改，請報由區隊長核章修正，收假前未簽名確認者，將依規定記點處分。',
@@ -1991,9 +2005,9 @@ function exportExcel(){
     }
     ws['!cols']=cw;
     ws['!rows']=rh;
-    /* 列印設定：橫向、1頁寬×1頁高、邊距18pt(0.25in)、頁首頁尾7.2pt(0.1in) */
-    ws['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:1,paperSize:9};
-    ws['!margins']={left:0.25,right:0.25,top:0.25,bottom:0.25,header:0.1,footer:0.1};
+    /* 列印設定：依勤務類型個別設定方向、縮放 */
+    ws['!pageSetup']=EXPORT_PAGE_SETUP[dtype]||EXPORT_PAGE_SETUP['值班'];
+    ws['!margins']=EXPORT_MARGINS;
     /* 列印範圍：精確設定為資料範圍 */
     var printRange=XLSX.utils.decode_range(ws['!ref']);
     var sheetLabel=def.label.replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31);
@@ -2074,9 +2088,9 @@ function exportExcel(){
     /* 欄寬 */
     ws2['!cols']=colWidths.map(function(w){return{wch:w};});
 
-    /* 列印設定：橫向、1頁寬×1頁高、邊距18pt(0.25in)、頁首頁尾7.2pt(0.1in) */
-    ws2['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:1,paperSize:9};
-    ws2['!margins']={left:0.25,right:0.25,top:0.25,bottom:0.25,header:0.1,footer:0.1};
+    /* 列印設定：時數總表用橫向、不限高度（多頁） */
+    ws2['!pageSetup']=EXPORT_PAGE_SETUP['_時數總表'];
+    ws2['!margins']=EXPORT_MARGINS;
     /* 列印範圍 */
     var printRange2=XLSX.utils.decode_range(ws2['!ref']);
     XLSX.utils.book_append_sheet(wb,ws2,'勤務時數總表');
@@ -2089,9 +2103,62 @@ function exportExcel(){
   var fname='勤務排班_第'+S.weekNum+'週.xlsx';
   try{
     var wbout=XLSX.write(wb,{bookType:'xlsx',type:'array'});
-    var blob=new Blob([wbout],{type:'application/octet-stream'});
-    downloadBlob(blob,fname);
+    /* JSZip 後處理：注入 pageSetup XML（xlsx-js-style 不支援寫入 pageSetup） */
+    injectPageSetup(wbout,wb.SheetNames).then(function(finalBuf){
+      var blob=new Blob([finalBuf],{type:'application/octet-stream'});
+      downloadBlob(blob,fname);
+    }).catch(function(e){showToast('匯出失敗：'+e.message,'error');});
   }catch(e){showToast('匯出失敗：'+e.message,'error');}
+}
+
+/* 用 JSZip 解壓 XLSX，為每個 sheet XML 注入 <pageSetup> 和 fitToPage */
+function injectPageSetup(xlsxBuf,sheetNames){
+  return JSZip.loadAsync(xlsxBuf).then(function(zip){
+    var tasks=[];
+    sheetNames.forEach(function(name,idx){
+      var xmlPath='xl/worksheets/sheet'+(idx+1)+'.xml';
+      var f=zip.file(xmlPath);
+      if(!f)return;
+      /* 查找該 sheet 對應的列印設定 */
+      var ps=null;
+      if(name==='勤務時數總表')ps=EXPORT_PAGE_SETUP['_時數總表'];
+      else{
+        for(var k in EXPORT_PAGE_SETUP){if(k!=='_時數總表'&&name.indexOf(k)!==-1){ps=EXPORT_PAGE_SETUP[k];break;}}
+      }
+      if(!ps)ps=EXPORT_PAGE_SETUP['值班'];
+      tasks.push(f.async('string').then(function(xml){
+        /* 構建 pageSetup XML */
+        var orient=ps.orientation||'portrait';
+        var ftw=ps.fitToWidth!=null?ps.fitToWidth:1;
+        var fth=ps.fitToHeight!=null?ps.fitToHeight:1;
+        var paper=ps.paperSize||9;
+        var psXml='<pageSetup orientation="'+orient+'" fitToWidth="'+ftw+'" fitToHeight="'+fth+'" paperSize="'+paper+'"/>';
+        /* 移除既有的 pageSetup（以防萬一） */
+        xml=xml.replace(/<pageSetup[^/]*\/>/g,'');
+        xml=xml.replace(/<pageSetup[^>]*>[\s\S]*?<\/pageSetup>/g,'');
+        /* 在 </worksheet> 前插入 pageSetup */
+        xml=xml.replace('</worksheet>',psXml+'</worksheet>');
+        /* 注入 fitToPage：需要在 <sheetPr> 中加入 <pageSetUpPr fitToPage="1"/> */
+        if(xml.indexOf('fitToPage')===-1){
+          if(xml.indexOf('<sheetPr')!==-1){
+            /* 已有 sheetPr，在其結尾前插入 */
+            if(xml.indexOf('<sheetPr/>') !== -1){
+              xml=xml.replace('<sheetPr/>','<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr>');
+            }else{
+              xml=xml.replace('</sheetPr>','<pageSetUpPr fitToPage="1"/></sheetPr>');
+            }
+          }else{
+            /* 沒有 sheetPr，在 <sheetData> 前插入 */
+            xml=xml.replace('<sheetData>','<sheetPr><pageSetUpPr fitToPage="1"/></sheetPr><sheetData>');
+          }
+        }
+        zip.file(xmlPath,xml);
+      }));
+    });
+    return Promise.all(tasks).then(function(){
+      return zip.generateAsync({type:'arraybuffer',compression:'DEFLATE'});
+    });
+  });
 }
 
 /* ===== BACKUP / RESTORE ===== */
