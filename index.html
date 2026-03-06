@@ -1991,11 +1991,17 @@ function exportExcel(){
     }
     ws['!cols']=cw;
     ws['!rows']=rh;
-    /* 列印設定：橫向、縮放至 1 頁（寬×高）、窄邊界 */
+    /* 列印設定：橫向、1頁寬×1頁高、邊距18pt(0.25in)、頁首頁尾7.2pt(0.1in) */
     ws['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:1,paperSize:9};
-    ws['!margins']={left:0.2,right:0.2,top:0.3,bottom:0.3,header:0.15,footer:0.15};
-
-    XLSX.utils.book_append_sheet(wb,ws,def.label.replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31));
+    ws['!margins']={left:0.25,right:0.25,top:0.25,bottom:0.25,header:0.1,footer:0.1};
+    /* 列印範圍：精確設定為資料範圍 */
+    var printRange=XLSX.utils.decode_range(ws['!ref']);
+    var sheetLabel=def.label.replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31);
+    XLSX.utils.book_append_sheet(wb,ws,sheetLabel);
+    var sheetIdx=wb.SheetNames.length-1;
+    if(!wb.Workbook)wb.Workbook={};
+    if(!wb.Workbook.Names)wb.Workbook.Names=[];
+    wb.Workbook.Names.push({Name:'_xlnm.Print_Area',Ref:sheetLabel+'!$A$1:$'+XLSX.utils.encode_col(printRange.e.c)+'$'+(printRange.e.r+1),Sheet:sheetIdx});
   });
   if(!wb.SheetNames.length){showToast('請先完成排勤再匯出','error');return;}
 
@@ -2068,11 +2074,16 @@ function exportExcel(){
     /* 欄寬 */
     ws2['!cols']=colWidths.map(function(w){return{wch:w};});
 
-    /* 列印設定 */
+    /* 列印設定：橫向、1頁寬×1頁高、邊距18pt(0.25in)、頁首頁尾7.2pt(0.1in) */
     ws2['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:1,paperSize:9};
-    ws2['!margins']={left:0.2,right:0.2,top:0.3,bottom:0.3,header:0.15,footer:0.15};
-
+    ws2['!margins']={left:0.25,right:0.25,top:0.25,bottom:0.25,header:0.1,footer:0.1};
+    /* 列印範圍 */
+    var printRange2=XLSX.utils.decode_range(ws2['!ref']);
     XLSX.utils.book_append_sheet(wb,ws2,'勤務時數總表');
+    var sheetIdx2=wb.SheetNames.length-1;
+    if(!wb.Workbook)wb.Workbook={};
+    if(!wb.Workbook.Names)wb.Workbook.Names=[];
+    wb.Workbook.Names.push({Name:'_xlnm.Print_Area',Ref:'勤務時數總表!$A$1:$'+XLSX.utils.encode_col(printRange2.e.c)+'$'+(printRange2.e.r+1),Sheet:sheetIdx2});
   })();
 
   var fname='勤務排班_第'+S.weekNum+'週.xlsx';
