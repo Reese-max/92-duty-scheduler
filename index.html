@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://cdn.jsdelivr.net 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; media-src 'self'">
 <title>92期1隊 半自動勤排系統</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
 <script src="https://cdn.jsdelivr.net/npm/xlsx-js-style@1.2.0/dist/xlsx.bundle.js" integrity="sha384-OUW9euuUyxyHcAhTqbhI+Iyb8LMssXt/cpz0yXhs9UWG2/R/uaWdakx/4cfww7Vb" crossorigin="anonymous"></script>
@@ -22,6 +22,7 @@
   --radius:12px;--shadow:0 8px 32px rgba(0,0,0,.5);
 }
 body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","Noto Sans TC",sans-serif;background:var(--bg);color:var(--text);line-height:1.6;min-height:100vh;overflow-x:hidden;padding-top:env(safe-area-inset-top);padding-bottom:env(safe-area-inset-bottom)}
+#bgVideo{position:fixed;top:0;left:0;width:100%;height:100%;object-fit:cover;z-index:-1;pointer-events:none;opacity:.35}
 
 /* === Custom Scrollbar === */
 ::-webkit-scrollbar{width:8px;height:8px}
@@ -409,6 +410,18 @@ main{max-width:1400px;margin:0 auto;padding:24px 16px 80px}
 </style>
 </head>
 <body>
+<video id="bgVideo" autoplay muted loop playsinline>
+  <source src="bg-desktop.mp4" media="(min-width:769px)" type="video/mp4">
+  <source src="bg-mobile.mp4" media="(max-width:768px)" type="video/mp4">
+</video>
+<script>
+(function(){
+  var v=document.getElementById('bgVideo');
+  var mob=window.matchMedia('(max-width:768px)');
+  function setSrc(){v.src=mob.matches?'bg-mobile.mp4':'bg-desktop.mp4';v.load();}
+  setSrc();mob.addEventListener('change',setSrc);
+})();
+</script>
 <header>
   <h1>92期1隊 半自動勤排系統<em>114-2</em></h1>
   <span class="ver">v2.4</span>
