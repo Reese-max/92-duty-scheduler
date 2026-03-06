@@ -1049,6 +1049,15 @@ function updatePickerHighlight(){
 function undoLastAssign(){
   if(undoStack.length===0){showToast('沒有可復原的操作','warn');return;}
   var u=undoStack.pop();
+  /* 整批復原（填滿操作） */
+  if(u.type==='fill'){
+    S.assignments=u.snapAssign;
+    S.thisWeekIds=u.snapIds;
+    renderResults();renderDashboard();
+    showToast('已復原填滿操作');
+    byId('btnUndo').disabled=undoStack.length===0;
+    return;
+  }
   var arr=S.assignments[u.dtype]&&S.assignments[u.dtype][u.key];
   if(!arr)return;
   var cur=arr[u.idx];
@@ -1819,6 +1828,8 @@ function handleFile(file){
   var validTypes=['.xlsx','.xls','.xlsm','.xlsb','.ods'];
   var ext=file.name.toLowerCase().match(/\.[^.]+$/);
   if(!ext||validTypes.indexOf(ext[0])<0){
+    var status=byId('importStatus');clearEl(status);
+    status.appendChild(h('div',{className:'import-err'},'✕ 不支援的檔案格式「'+file.name+'」，請選擇 Excel 檔案（.xlsx）'));
     showToast('不支援的檔案格式，請選擇 Excel 檔案（.xlsx）','error');return;
   }
   var reader=new FileReader();
@@ -2113,7 +2124,13 @@ function init(){
     var spinner=h('span',{className:'spinner'});
     btn.insertBefore(spinner,btn.firstChild);
     setTimeout(function(){
-      fillRemainingSlots(targetDtype||undefined);renderResults();renderDashboard();
+      /* 保存填滿前快照，支援 Ctrl+Z 整批復原 */
+      var snapBefore=cloneAssignments(S.assignments);
+      var snapIds=new Set(S.thisWeekIds);
+      fillRemainingSlots(targetDtype||undefined);
+      undoStack.push({type:'fill',snapAssign:snapBefore,snapIds:snapIds});
+      byId('btnUndo').disabled=false;
+      renderResults();renderDashboard();
       btn.removeChild(spinner);
       btn.disabled=false;
       var scopeName=targetDtype?(DUTY_DEFS[targetDtype]?DUTY_DEFS[targetDtype].label:targetDtype):'所有';
