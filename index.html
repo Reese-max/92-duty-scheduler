@@ -1991,9 +1991,9 @@ function exportExcel(){
     }
     ws['!cols']=cw;
     ws['!rows']=rh;
-    /* 列印設定：橫向、縮放至 1 頁寬、窄邊界 */
-    ws['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:0,paperSize:9};
-    ws['!margins']={left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2};
+    /* 列印設定：橫向、縮放至 1 頁（寬×高）、窄邊界 */
+    ws['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:1,paperSize:9};
+    ws['!margins']={left:0.2,right:0.2,top:0.3,bottom:0.3,header:0.15,footer:0.15};
 
     XLSX.utils.book_append_sheet(wb,ws,def.label.replace(/[:\\\/\?\*\[\]]/g,'').slice(0,31));
   });
@@ -2069,8 +2069,8 @@ function exportExcel(){
     ws2['!cols']=colWidths.map(function(w){return{wch:w};});
 
     /* 列印設定 */
-    ws2['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:0,paperSize:9};
-    ws2['!margins']={left:0.3,right:0.3,top:0.4,bottom:0.4,header:0.2,footer:0.2};
+    ws2['!pageSetup']={orientation:'landscape',fitToWidth:1,fitToHeight:1,paperSize:9};
+    ws2['!margins']={left:0.2,right:0.2,top:0.3,bottom:0.3,header:0.15,footer:0.15};
 
     XLSX.utils.book_append_sheet(wb,ws2,'勤務時數總表');
   })();
